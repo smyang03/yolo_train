@@ -26,9 +26,30 @@ class YOLOv7Trainer:
         """경로 설정 - 같은 레벨에 있는 YOLOv7 찾기"""
         self.app_dir = Path(__file__).parent.parent.parent  # yolov7_gui_standalone/
         self.project_workspace = self.app_dir.parent       # workspace/
-        
-        # YOLOv7 원본 경로 (같은 레벨)
-        self.yolo_original_dir = Path("E:/yolov7_project/yolov7")
+
+        # YOLOv7 원본 경로 (같은 레벨) - 동적 경로 탐색
+        # 우선순위: 1) 같은 부모 디렉토리, 2) 환경변수, 3) 현재 디렉토리
+        yolo_candidates = [
+            self.project_workspace / "yolov7",  # workspace/yolov7/
+            self.app_dir.parent / "yolov7",      # 같은 레벨
+            Path.cwd() / "yolov7",               # 현재 디렉토리
+            Path.cwd().parent / "yolov7",        # 상위 디렉토리
+        ]
+
+        # 환경 변수 체크
+        if os.environ.get('YOLOV7_PATH'):
+            yolo_candidates.insert(0, Path(os.environ['YOLOV7_PATH']))
+
+        self.yolo_original_dir = None
+        for candidate in yolo_candidates:
+            if candidate.exists() and (candidate / "train.py").exists():
+                self.yolo_original_dir = candidate
+                break
+
+        # 찾지 못한 경우 기본값 설정
+        if self.yolo_original_dir is None:
+            self.yolo_original_dir = self.project_workspace / "yolov7"
+
         self.train_script = self.yolo_original_dir / "train.py"
         
         # GUI 프로젝트 경로들
