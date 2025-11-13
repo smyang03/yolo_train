@@ -28,19 +28,44 @@ class ExeBuilder:
 
         # 숨겨진 import들 (PyInstaller가 자동 감지 못하는 모듈)
         self.hidden_imports = [
+            # 딥러닝 프레임워크
             'torch',
             'torchvision',
+            'torch.nn',
+            'torch.optim',
+            'torch.utils',
+            'torch.utils.data',
+
+            # 컴퓨터 비전
             'cv2',
-            'numpy',
-            'matplotlib',
-            'matplotlib.backends.backend_tkagg',
             'PIL',
-            'yaml',
+            'PIL.Image',
+            'albumentations',
+
+            # 수치 연산
+            'numpy',
             'pandas',
             'scipy',
             'sklearn',
+
+            # GUI 및 시각화
+            'matplotlib',
+            'matplotlib.pyplot',
+            'matplotlib.backends.backend_tkagg',
+            'matplotlib.figure',
+
+            # 설정 및 유틸리티
+            'yaml',
+            'json',
+            'pathlib',
             'tqdm',
-            'albumentations',
+            'queue',
+            'threading',
+            'subprocess',
+
+            # YOLO 관련
+            'yolov7_embedded',
+            'yolov7_embedded.train_core',
         ]
 
     def clean_build(self):
@@ -228,6 +253,16 @@ coll = COLLECT(
             total_size = sum(f.stat().st_size for f in self.dist_dir.rglob('*') if f.is_file())
             print(f"\n전체 크기: {total_size / (1024 * 1024):.2f} MB")
 
+        print("=" * 70)
+        print("\n⚠️  중요: EXE 실행 전 확인사항")
+        print("=" * 70)
+        print("1. YOLOv7 레포지토리가 필요합니다:")
+        print("   - dist/ 폴더와 같은 위치에 yolov7/ 폴더 배치")
+        print("   - 또는 환경 변수 설정: set YOLOV7_PATH=C:\\path\\to\\yolov7")
+        print("")
+        print("2. CUDA 및 cuDNN이 설치되어 있어야 GPU 사용 가능")
+        print("")
+        print("3. 첫 실행 시 시간이 걸릴 수 있습니다")
         print("=" * 70)
 
     def create_installer_script(self):

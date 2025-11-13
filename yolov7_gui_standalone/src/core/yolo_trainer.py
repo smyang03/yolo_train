@@ -87,9 +87,10 @@ class YOLOv7Trainer:
         self.current_metrics = {}
         self.training_config = {}
         self.start_time = None
-        self.log_queue = Queue()
+        self.log_queue = Queue(maxsize=1000)  # 메모리 누수 방지: 최대 1000개 로그
         self.monitor_thread = None
         self.log_file_path = None
+        self._stop_event = threading.Event()  # 스레드 안전 종료용
         
     def register_callback(self, event, callback):
         """이벤트 콜백 등록
@@ -305,40 +306,55 @@ class YOLOv7Trainer:
         
         return descriptions.get(filename, '📝 Custom hyperparameters')
     def _monitor_training(self):
-        """훈련 모니터링 (별도 스레드)"""
-        while self.is_training and self.process:
-            try:
-                # stdout에서 한 줄씩 읽기
-                line = self.process.stdout.readline()
-                
-                if not line:
+        """훈련 모니터링 (별도 스레드) - 안전성 강화"""
+        try:
+            while self.is_training and self.process and not self._stop_event.is_set():
+                try:
+                    # stdout에서 한 줄씩 읽기 (타임아웃 추가)
+                    line = self.process.stdout.readline()
+
+                    if not line:
+                        break
+
+                    line = line.strip()
+                    if line:
+                        # 로그 파싱
+                        metrics = self.log_parser.parse_line(line)
+                        if metrics:
+                            self.current_metrics.update(metrics)
+                            self.trigger_callback('metrics_update', self.current_metrics)
+
+                        # 로그 큐에 추가 (큐가 가득 차면 오래된 항목 제거)
+                        try:
+                            self.log_queue.put(line, block=False)
+                        except:
+                            # 큐가 가득 차면 하나 제거하고 추가
+                            try:
+                                self.log_queue.get_nowait()
+                                self.log_queue.put(line, block=False)
+                            except:
+                                pass
+
+                        self.trigger_callback('log_update', {'line': line})
+
+                except Exception as e:
+                    if self.is_training:  # 정상 종료가 아닌 경우만 오류 보고
+                        self.trigger_callback('error', {'message': f"모니터링 오류: {e}"})
                     break
-                
-                line = line.strip()
-                if line:
-                    # 로그 파싱
-                    metrics = self.log_parser.parse_line(line)
-                    if metrics:
-                        self.current_metrics.update(metrics)
-                        self.trigger_callback('metrics_update', self.current_metrics)
-                    
-                    # 로그 큐에 추가
-                    self.log_queue.put(line)
-                    self.trigger_callback('log_update', {'line': line})
-                
-            except Exception as e:
-                self.trigger_callback('error', {'message': f"모니터링 오류: {e}"})
-                break
-        
-        # 프로세스 종료 확인
-        if self.process:
-            return_code = self.process.poll()
-            if return_code is not None:
-                self.is_training = False
-                if return_code == 0:
-                    self.trigger_callback('training_complete', {'success': True})
-                else:
-                    self.trigger_callback('training_complete', {'success': False, 'return_code': return_code})
+
+            # 프로세스 종료 확인
+            if self.process:
+                return_code = self.process.poll()
+                if return_code is not None:
+                    self.is_training = False
+                    if return_code == 0:
+                        self.trigger_callback('training_complete', {'success': True})
+                    else:
+                        self.trigger_callback('training_complete', {'success': False, 'return_code': return_code})
+
+        finally:
+            # 스레드 종료 시 리소스 정리
+            print("모니터링 스레드 종료")
     
     def pause_training(self):
         """훈련 일시정지"""
@@ -360,32 +376,62 @@ class YOLOv7Trainer:
             return False
     
     def stop_training(self):
-        """훈련 정지"""
+        """훈련 정지 - 리소스 안전 정리"""
         if not self.process:
             return True
-        
+
         try:
             self.is_training = False
             self.is_paused = False
-            
+            self._stop_event.set()  # 모니터링 스레드에 종료 신호
+
             # 프로세스 종료
             self.process.terminate()
-            
+
             # 강제 종료 대기
             try:
                 self.process.wait(timeout=10)
             except subprocess.TimeoutExpired:
+                print("⚠️ 프로세스 강제 종료")
                 self.process.kill()
                 self.process.wait()
-            
+
+            # stdout 명시적으로 닫기
+            if self.process.stdout:
+                self.process.stdout.close()
+
+            # 모니터링 스레드 종료 대기
+            if self.monitor_thread and self.monitor_thread.is_alive():
+                self.monitor_thread.join(timeout=5)
+                if self.monitor_thread.is_alive():
+                    print("⚠️ 모니터링 스레드가 정상 종료되지 않음")
+
             self.process = None
+            self.monitor_thread = None
             self.trigger_callback('training_stopped')
-            
+
             return True
-            
+
         except Exception as e:
             self.trigger_callback('error', {'message': f"정지 실패: {e}"})
             return False
+
+    def cleanup(self):
+        """리소스 정리 - 애플리케이션 종료 시 호출"""
+        print("🧹 YOLOv7Trainer 리소스 정리 중...")
+
+        # 훈련 중이면 중지
+        if self.is_training:
+            self.stop_training()
+
+        # 큐 비우기
+        while not self.log_queue.empty():
+            try:
+                self.log_queue.get_nowait()
+            except:
+                break
+
+        print("✅ YOLOv7Trainer 정리 완료")
     
     def get_training_status(self):
         """훈련 상태 반환"""
