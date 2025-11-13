@@ -1,0 +1,17 @@
+Error: YOLOv7 레포지토리를 찾을 수 없습니다: D:\code\yolov7_project\yolov7
+workspace/ 폴더에 yolov7/ 가 있는지 확인하세요.
+Traceback (most recent call last):
+  File "main.py", line 70, in main
+    app = YOLOv7App()
+  File "src\app.py", line 26, in __init__
+    self.init_components()
+  File "src\app.py", line 53, in init_components
+    self.trainer = YOLOv7Trainer()
+  File "src\core\yolo_trainer.py", line 20, in __init__
+    self.setup_paths()
+  File "src\core\yolo_trainer.py", line 44, in setup_paths
+    self.validate_paths()
+  File "src\core\yolo_trainer.py", line 50, in validate_paths
+    f"YOLOv7 레포지토리를 찾을 수 없습니다: {self.yolo_original_dir}\n"
+FileNotFoundError: YOLOv7 레포지토리를 찾을 수 없습니다: D:\code\yolov7_project\yolov7
+workspace/ 폴더에 yolov7/ 가 있는지 확인하세요.

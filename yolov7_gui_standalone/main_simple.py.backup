@@ -1,0 +1,402 @@
+"""
+YOLOv7 Training GUI - Main Entry Point
+메인 실행 파일
+"""
+
+import sys
+import os
+import traceback
+from pathlib import Path
+
+# 경로 설정
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir / "src"))
+
+def get_resource_path(relative_path):
+    """EXE에서 리소스 파일 경로 찾기"""
+    try:
+        # PyInstaller로 빌드된 경우
+        base_path = sys._MEIPASS
+    except Exception:
+        # 개발 환경
+        base_path = os.path.abspath(".")
+    
+    return os.path.join(base_path, relative_path)
+
+def check_requirements():
+    """필수 패키지 확인"""
+    required_packages = ['torch', 'torchvision', 'cv2', 'numpy', 'matplotlib', 'yaml']
+    missing_packages = []
+    
+    for package in required_packages:
+        try:
+            if package == 'cv2':
+                import cv2
+            elif package == 'yaml':
+                import yaml
+            else:
+                __import__(package)
+        except ImportError:
+            missing_packages.append(package)
+    
+    if missing_packages:
+        print("❌ 다음 패키지들이 설치되지 않았습니다:")
+        for pkg in missing_packages:
+            print(f"   - {pkg}")
+        print("\n📦 설치 명령어:")
+        print("pip install torch torchvision opencv-python numpy matplotlib PyYAML")
+        return False
+    
+    return True
+
+def create_simple_ui():
+    """간단한 UI 파일 생성"""
+    
+    ui_dir = Path("src/ui")
+    ui_dir.mkdir(exist_ok=True)
+    
+    # 간단한 main_window.py 생성
+    simple_ui = '''"""
+YOLOv7 Training GUI - Simple Main Window
+"""
+
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+from pathlib import Path
+
+class MainWindow:
+    """간단한 메인 GUI 윈도우"""
+    
+    def __init__(self, root, trainer, config_manager, model_manager):
+        self.root = root
+        self.trainer = trainer
+        self.config_manager = config_manager
+        self.model_manager = model_manager
+        
+        # UI 변수들
+        self.dataset_path_var = tk.StringVar()
+        self.epochs_var = tk.IntVar(value=100)
+        self.batch_size_var = tk.IntVar(value=8)
+        self.device_var = tk.StringVar(value="cpu")
+        self.experiment_name_var = tk.StringVar(value="gui_test")
+        
+        # UI 생성
+        self.create_ui()
+        self.setup_callbacks()
+        
+    def create_ui(self):
+        """UI 생성"""
+        self.root.title("🚀 YOLOv7 Training GUI")
+        self.root.geometry("800x600")
+        self.root.configure(bg='#f0f0f0')
+        
+        # 메인 프레임
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.pack(fill='both', expand=True)
+        
+        # 제목
+        title_label = ttk.Label(main_frame, text="🚀 YOLOv7 Training GUI", 
+                               font=('Arial', 20, 'bold'))
+        title_label.pack(pady=20)
+        
+        # 설정 프레임
+        settings_frame = ttk.LabelFrame(main_frame, text="⚙️ 훈련 설정", padding="15")
+        settings_frame.pack(fill='x', pady=10)
+        
+        # 데이터셋 경로
+        ttk.Label(settings_frame, text="Dataset Path (YAML):").pack(anchor='w')
+        dataset_frame = ttk.Frame(settings_frame)
+        dataset_frame.pack(fill='x', pady=5)
+        
+        ttk.Entry(dataset_frame, textvariable=self.dataset_path_var, width=60).pack(side='left', fill='x', expand=True)
+        ttk.Button(dataset_frame, text="Browse", command=self.browse_dataset).pack(side='right', padx=(5, 0))
+        
+        # 훈련 파라미터
+        params_frame = ttk.Frame(settings_frame)
+        params_frame.pack(fill='x', pady=10)
+        
+        # Epochs
+        ttk.Label(params_frame, text="Epochs:").grid(row=0, column=0, sticky='w', padx=(0, 10))
+        ttk.Scale(params_frame, from_=1, to=500, variable=self.epochs_var, orient='horizontal', length=200).grid(row=0, column=1, sticky='ew')
+        self.epochs_label = ttk.Label(params_frame, text="100")
+        self.epochs_label.grid(row=0, column=2, padx=(5, 0))
+        
+        # Batch Size
+        ttk.Label(params_frame, text="Batch Size:").grid(row=1, column=0, sticky='w', padx=(0, 10), pady=(5, 0))
+        ttk.Scale(params_frame, from_=1, to=32, variable=self.batch_size_var, orient='horizontal', length=200).grid(row=1, column=1, sticky='ew', pady=(5, 0))
+        self.batch_label = ttk.Label(params_frame, text="8")
+        self.batch_label.grid(row=1, column=2, padx=(5, 0), pady=(5, 0))
+        
+        # Device
+        ttk.Label(params_frame, text="Device:").grid(row=2, column=0, sticky='w', padx=(0, 10), pady=(5, 0))
+        device_combo = ttk.Combobox(params_frame, textvariable=self.device_var, values=["cpu", "0", "0,1"], width=20)
+        device_combo.grid(row=2, column=1, sticky='w', pady=(5, 0))
+        
+        # Experiment Name
+        ttk.Label(params_frame, text="Experiment:").grid(row=3, column=0, sticky='w', padx=(0, 10), pady=(5, 0))
+        ttk.Entry(params_frame, textvariable=self.experiment_name_var, width=25).grid(row=3, column=1, sticky='w', pady=(5, 0))
+        
+        params_frame.grid_columnconfigure(1, weight=1)
+        
+        # 로그 프레임
+        log_frame = ttk.LabelFrame(main_frame, text="📝 Training Log", padding="10")
+        log_frame.pack(fill='both', expand=True, pady=10)
+        
+        # 로그 텍스트
+        log_container = ttk.Frame(log_frame)
+        log_container.pack(fill='both', expand=True)
+        
+        self.log_text = tk.Text(log_container, bg='#2c3e50', fg='#ecf0f1', 
+                               font=('Courier', 10), height=15, wrap=tk.WORD)
+        log_scrollbar = ttk.Scrollbar(log_container, orient="vertical", command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=log_scrollbar.set)
+        
+        self.log_text.pack(side="left", fill="both", expand=True)
+        log_scrollbar.pack(side="right", fill="y")
+        
+        # 버튼 프레임
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill='x', pady=20)
+        
+        # 버튼들
+        self.start_btn = ttk.Button(button_frame, text="🚀 Start Training", command=self.start_training)
+        self.start_btn.pack(side='left', padx=5)
+        
+        self.stop_btn = ttk.Button(button_frame, text="⏹️ Stop", command=self.stop_training, state='disabled')
+        self.stop_btn.pack(side='left', padx=5)
+        
+        ttk.Button(button_frame, text="🔄 Reset", command=self.reset_settings).pack(side='left', padx=5)
+        
+        ttk.Button(button_frame, text="🧪 Test Connection", command=self.test_connection).pack(side='right', padx=5)
+        
+        # 초기 로그 메시지
+        self.add_log_entry("💡 YOLOv7 GUI 준비 완료!")
+        self.add_log_entry(f"📁 YOLOv7 경로: {self.trainer.yolo_original_dir}")
+        self.add_log_entry("🎯 데이터셋을 선택하고 Start Training을 클릭하세요.")
+        
+        # Scale 변경 시 라벨 업데이트
+        self.epochs_var.trace('w', lambda *args: self.epochs_label.config(text=str(self.epochs_var.get())))
+        self.batch_size_var.trace('w', lambda *args: self.batch_label.config(text=str(self.batch_size_var.get())))
+    
+    def setup_callbacks(self):
+        """트레이너 콜백 설정"""
+        self.trainer.register_callback('training_started', self.on_training_started)
+        self.trainer.register_callback('log_update', self.on_log_update)
+        self.trainer.register_callback('training_complete', self.on_training_complete)
+        self.trainer.register_callback('error', self.on_error)
+    
+    def browse_dataset(self):
+        """데이터셋 파일 선택"""
+        filename = filedialog.askopenfilename(
+            title="Select Dataset YAML File",
+            filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
+        )
+        if filename:
+            self.dataset_path_var.set(filename)
+            self.add_log_entry(f"📂 데이터셋 선택: {Path(filename).name}")
+    
+    def start_training(self):
+        """훈련 시작"""
+        if not self.validate_settings():
+            return
+        
+        # UI 설정 수집
+        ui_config = {
+            'dataset_path': self.dataset_path_var.get(),
+            'model_config': 'cfg/training/yolov7.yaml',
+            'epochs': self.epochs_var.get(),
+            'batch_size': self.batch_size_var.get(),
+            'image_size': 640,
+            'device': self.device_var.get(),
+            'experiment_name': self.experiment_name_var.get(),
+            'weights_path': '',
+            'workers': 4,
+            'learning_rate': 0.01
+        }
+        
+        try:
+            # YOLOv7 설정으로 변환
+            training_config = self.config_manager.get_training_config(ui_config)
+            
+            # 훈련 시작
+            self.add_log_entry("🚀 훈련 시작 중...")
+            self.trainer.start_training(training_config)
+            
+        except Exception as e:
+            self.add_log_entry(f"❌ 훈련 시작 실패: {e}")
+            messagebox.showerror("오류", f"훈련 시작 실패: {e}")
+    
+    def stop_training(self):
+        """훈련 정지"""
+        if messagebox.askyesno("확인", "훈련을 정지하시겠습니까?"):
+            self.trainer.stop_training()
+            self.add_log_entry("⏹️ 훈련 정지됨")
+    
+    def reset_settings(self):
+        """설정 초기화"""
+        self.dataset_path_var.set("")
+        self.epochs_var.set(100)
+        self.batch_size_var.set(8)
+        self.device_var.set("cpu")
+        self.experiment_name_var.set("gui_test")
+        self.add_log_entry("🔄 설정 초기화됨")
+    
+    def test_connection(self):
+        """연결 테스트"""
+        try:
+            test_config = {
+                'dataset_path': 'test.yaml',
+                'model_config': 'cfg/training/yolov7.yaml',
+                'epochs': 1,
+                'batch_size': 1,
+                'image_size': 640,
+                'device': 'cpu',
+                'experiment_name': 'test'
+            }
+            
+            yolo_config = self.config_manager.get_training_config(test_config)
+            cmd = self.trainer.build_command(yolo_config)
+            
+            self.add_log_entry("🧪 연결 테스트 성공!")
+            self.add_log_entry(f"🔧 명령어 길이: {len(cmd)} 인자")
+            messagebox.showinfo("테스트 성공", "YOLOv7 연결이 정상입니다!")
+            
+        except Exception as e:
+            self.add_log_entry(f"❌ 연결 테스트 실패: {e}")
+            messagebox.showerror("테스트 실패", f"연결 오류: {e}")
+    
+    def validate_settings(self):
+        """설정 유효성 검사"""
+        if not self.dataset_path_var.get():
+            messagebox.showerror("오류", "데이터셋을 선택해주세요.")
+            return False
+        
+        dataset_path = Path(self.dataset_path_var.get())
+        if not dataset_path.exists():
+            messagebox.showerror("오류", f"데이터셋 파일을 찾을 수 없습니다: {dataset_path}")
+            return False
+        
+        return True
+    
+    # 콜백 메서드들
+    def on_training_started(self, data):
+        """훈련 시작 콜백"""
+        self.add_log_entry("✅ 훈련이 시작되었습니다!")
+        self.start_btn.config(state='disabled')
+        self.stop_btn.config(state='normal')
+    
+    def on_log_update(self, data):
+        """로그 업데이트 콜백"""
+        log_line = data.get('line', '')
+        if log_line.strip():
+            self.root.after(0, self.add_log_entry, log_line.strip())
+    
+    def on_training_complete(self, data):
+        """훈련 완료 콜백"""
+        success = data.get('success', False)
+        if success:
+            self.add_log_entry("🎉 훈련이 완료되었습니다!")
+        else:
+            self.add_log_entry("❌ 훈련이 실패했습니다.")
+        
+        self.start_btn.config(state='normal')
+        self.stop_btn.config(state='disabled')
+    
+    def on_error(self, data):
+        """오류 콜백"""
+        error_msg = data.get('message', 'Unknown error')
+        self.add_log_entry(f"❌ 오류: {error_msg}")
+    
+    def add_log_entry(self, message):
+        """로그 엔트리 추가"""
+        from datetime import datetime
+        
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_message = f"[{timestamp}] {message}\\n"
+        
+        # 텍스트 위젯에 추가
+        self.log_text.insert(tk.END, log_message)
+        self.log_text.see(tk.END)
+        
+        # 로그 길이 제한
+        lines = self.log_text.get("1.0", tk.END).split('\\n')
+        if len(lines) > 500:
+            self.log_text.delete("1.0", "100.0")
+    
+    def show(self):
+        """윈도우 표시"""
+        self.root.deiconify()
+'''
+    
+    with open("src/ui/main_window.py", 'w', encoding='utf-8') as f:
+        f.write(simple_ui)
+    
+    print("✅ 간단한 UI 생성 완료!")
+
+def main():
+    """메인 실행 함수"""
+    
+    print("🚀 YOLOv7 Training GUI 시작...")
+    print("=" * 50)
+    
+    try:
+        # 필수 패키지 확인
+        if not check_requirements():
+            input("\\n패키지를 설치한 후 Enter를 누르세요...")
+            return
+        
+        print("✅ 모든 필수 패키지가 설치되어 있습니다.")
+        
+        # UI 파일 확인 및 생성
+        ui_file = Path("src/ui/main_window.py")
+        if not ui_file.exists() or ui_file.stat().st_size < 1000:
+            print("📝 UI 파일 생성 중...")
+            create_simple_ui()
+        
+        # GUI 애플리케이션 시작
+        from app import YOLOv7App
+        
+        print("🎯 애플리케이션 초기화 중...")
+        app = YOLOv7App()
+        
+        print("🎨 GUI 시작 중...")
+        app.run()
+        
+    except KeyboardInterrupt:
+        print("\\n👋 사용자에 의해 종료되었습니다.")
+    
+    except ImportError as e:
+        print(f"❌ 모듈 임포트 오류: {e}")
+        print("\\n🔧 해결 방법:")
+        print("1. 필요한 패키지가 설치되었는지 확인")
+        print("2. 가상환경이 활성화되었는지 확인")
+        print("3. Python 경로가 올바른지 확인")
+        
+    except Exception as e:
+        # 에러 로깅
+        error_log = current_dir / "error.log"
+        with open(error_log, "w", encoding='utf-8') as f:
+            f.write(f"Error: {str(e)}\\n")
+            f.write(traceback.format_exc())
+        
+        print(f"❌ 애플리케이션 오류: {str(e)}")
+        print(f"📝 자세한 오류 정보가 {error_log}에 저장되었습니다.")
+        
+        # 사용자에게 에러 알림
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror(
+                "오류 발생", 
+                f"애플리케이션 실행 중 오류가 발생했습니다.\\n\\n{str(e)}\\n\\n자세한 내용은 error.log 파일을 확인하세요."
+            )
+        except:
+            print("GUI 오류 알림 표시 실패")
+        
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
