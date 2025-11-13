@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# PyInstaller
+*.manifest
+*.spec
+build_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Training outputs
+yolov7_gui_standalone/outputs/
+yolov7_gui_standalone/runs/
+yolov7_gui_standalone/test_output/
+
+# Logs
+*.log
+error.log
+
+# Weights (optional - uncomment if you want to ignore large weight files)
+# *.pt
+# *.pth
+# *.weights
+
+# Dataset (optional - usually kept separate)
+# datasets/
+# data/
