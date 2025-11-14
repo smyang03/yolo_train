@@ -246,39 +246,87 @@ class MainWindow:
         subtitle_label.pack()
     
     def create_enhanced_settings_tab(self):
-        """설정 탭 생성"""
+        """설정 탭 생성 - 2칼럼 레이아웃으로 개선"""
         settings_frame = ttk.Frame(self.notebook)
         self.notebook.add(settings_frame, text="⚙️ 학습 설정")
-        
+
         # 스크롤 가능한 프레임
-        canvas = tk.Canvas(settings_frame)
+        canvas = tk.Canvas(settings_frame, bg='#f0f0f0')
         scrollbar = ttk.Scrollbar(settings_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
-        
+
         scrollable_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        
+
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # Dataset 설정 섹션
-        self.create_dataset_section(scrollable_frame)
-        
-        # 훈련 파라미터 섹션
-        self.create_training_params_section(scrollable_frame)
-        
-        # 고급 옵션 섹션
-        self.create_advanced_options_section(scrollable_frame)
-        
+
+        # 메인 컨테이너 - 2칼럼 레이아웃
+        main_container = ttk.Frame(scrollable_frame)
+        main_container.pack(fill='both', expand=True, padx=10, pady=10)
+
+        # 좌측 칼럼
+        left_column = ttk.Frame(main_container)
+        left_column.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
+
+        # 우측 칼럼
+        right_column = ttk.Frame(main_container)
+        right_column.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
+
+        # 칼럼 가중치 설정 (50:50 비율)
+        main_container.grid_columnconfigure(0, weight=1)
+        main_container.grid_columnconfigure(1, weight=1)
+        main_container.grid_rowconfigure(0, weight=1)
+
+        # 좌측: Dataset + Model 설정
+        self.create_dataset_section(left_column)
+        self.create_model_section(left_column)
+
+        # 우측: Training Parameters + Hyperparameters + Advanced Options
+        self.create_training_params_section(right_column)
+        self.create_hyperparams_section(right_column)
+        self.create_advanced_options_section(right_column)
+
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+
+    def create_model_section(self, parent):
+        """모델 설정 섹션 (새로 추가)"""
+        model_frame = ttk.LabelFrame(parent, text="🤖 Model Configuration", padding=15)
+        model_frame.pack(fill='x', pady=10)
+
+        # Model Config
+        ttk.Label(model_frame, text="Model Config:", font=('Arial', 11, 'bold')).pack(anchor='w', pady=(0, 5))
+        config_frame = ttk.Frame(model_frame)
+        config_frame.pack(fill='x', pady=(0, 10))
+
+        ttk.Entry(config_frame, textvariable=self.model_config_var, font=('Arial', 10), width=40).pack(side='left', fill='x', expand=True)
+        ttk.Button(config_frame, text="Browse", command=self.browse_model_config).pack(side='right', padx=(5, 0))
+
+        # Weights
+        ttk.Label(model_frame, text="Pre-trained Weights (optional):", font=('Arial', 11, 'bold')).pack(anchor='w', pady=(0, 5))
+        weights_frame = ttk.Frame(model_frame)
+        weights_frame.pack(fill='x', pady=(0, 10))
+
+        ttk.Entry(weights_frame, textvariable=self.weights_path_var, font=('Arial', 10), width=40).pack(side='left', fill='x', expand=True)
+        ttk.Button(weights_frame, text="Browse", command=self.browse_weights).pack(side='right', padx=(5, 0))
+
+        # Image Size
+        size_frame = ttk.Frame(model_frame)
+        size_frame.pack(fill='x')
+
+        ttk.Label(size_frame, text="Image Size:", font=('Arial', 10)).pack(side='left', padx=(0, 10))
+        ttk.Combobox(size_frame, textvariable=self.image_size_var, values=["320", "416", "512", "640", "768", "896", "1024", "1280"],
+                    width=12, state='readonly').pack(side='left')
+
+        ttk.Label(size_frame, text="💡 권장: 640", font=('Arial', 9), foreground='gray').pack(side='left', padx=(10, 0))
     
     def create_dataset_section(self, parent):
-        """Dataset 설정 섹션 - 하이퍼파라미터 섹션 추가"""
+        """Dataset 설정 섹션 - 2칼럼 레이아웃용 간소화"""
         dataset_frame = ttk.LabelFrame(parent, text="📁 Dataset Configuration", padding=15)
-        dataset_frame.pack(fill='x', pady=10, padx=15)
+        dataset_frame.pack(fill='x', pady=10)
         
         # 기존 Dataset 설정 코드들...
         # Dataset Mode 선택
@@ -373,13 +421,7 @@ class MainWindow:
         self.merge_result_label = ttk.Label(self.multiple_dataset_frame, text="",
                                            foreground='green', font=('Arial', 9, 'bold'))
         self.merge_result_label.pack(pady=5)
-        
-        # 모델 설정들
-        self.create_model_config_section(dataset_frame)
-        
-        # 🔥 하이퍼파라미터 섹션 추가 (여기가 중요!)
-        self.create_hyperparams_section(dataset_frame)
-        
+
         # 초기에는 multiple dataset frame 숨김
         self.on_dataset_mode_change()
     
@@ -1065,7 +1107,7 @@ class MainWindow:
     def create_training_params_section(self, parent):
         """훈련 파라미터 섹션"""
         params_frame = ttk.LabelFrame(parent, text="⚙️ Training Parameters", padding=15)
-        params_frame.pack(fill='x', pady=10, padx=15)
+        params_frame.pack(fill='x', pady=10)
         
         # 파라미터 그리드
         params_grid = ttk.Frame(params_frame)
@@ -1125,7 +1167,7 @@ class MainWindow:
     def create_advanced_options_section(self, parent):
         """고급 훈련 옵션 섹션"""
         options_frame = ttk.LabelFrame(parent, text="🎯 Training Options", padding=15)
-        options_frame.pack(fill='x', pady=10, padx=15)
+        options_frame.pack(fill='x', pady=10)
         
         # 기존 옵션들
         left_options = ttk.Frame(options_frame)
@@ -2198,7 +2240,7 @@ class MainWindow:
     def create_hyperparams_section(self, parent):
         """하이퍼파라미터 설정 섹션 - UI에 통합"""
         hyp_frame = ttk.LabelFrame(parent, text="⚙️ Hyperparameters Configuration", padding=15)
-        hyp_frame.pack(fill='x', pady=15, padx=15)
+        hyp_frame.pack(fill='x', pady=10)
         
         # 하이퍼파라미터 모드 선택
         ttk.Label(hyp_frame, text="Hyperparameters Mode:", font=('Arial', 11, 'bold')).pack(anchor='w')
