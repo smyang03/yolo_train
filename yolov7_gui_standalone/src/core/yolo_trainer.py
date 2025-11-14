@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import signal
+import traceback
 from pathlib import Path
 from queue import Queue, Empty
 from datetime import datetime
@@ -175,39 +176,71 @@ class YOLOv7Trainer:
         """훈련 시작"""
         if self.is_training:
             raise RuntimeError("이미 훈련이 진행 중입니다.")
-        
+
         self.training_config = config.copy()
         self.start_time = time.time()
-        
+
         # 명령어 구성
         cmd = self.build_command(config)
-        
+
+        # Python unbuffered output 모드 추가 (stdout 버퍼링 방지)
+        if cmd[0] == 'python':
+            cmd.insert(1, '-u')
+
         print("🚀 YOLOv7 훈련 시작...")
         print(f"명령어: {' '.join(cmd)}")
-        
+
         try:
+            # 디버그 모드 확인 (환경변수 또는 기본값)
+            debug_mode = os.getenv('YOLO_DEBUG', 'False').lower() == 'true'
+
             # 프로세스 시작
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.PIPE,  # stderr 분리하여 에러 메시지 캡처
                 universal_newlines=True,
                 cwd=self.yolo_original_dir,  # YOLOv7 디렉토리에서 실행
-                bufsize=1,  # 라인 버퍼링
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                bufsize=0,  # 0 = unbuffered (즉시 출력)
+                creationflags=0 if debug_mode or os.name != 'nt' else subprocess.CREATE_NO_WINDOW
             )
-            
+
+            # ✨ 프로세스 시작 확인 (2초 대기 후 상태 체크)
+            print("⏳ 프로세스 시작 확인 중...")
+            time.sleep(2)
+
+            return_code = self.process.poll()
+            if return_code is not None:
+                # 프로세스가 즉시 종료됨!
+                stderr_output = self.process.stderr.read() if self.process.stderr else ""
+                stdout_output = self.process.stdout.read() if self.process.stdout else ""
+
+                error_msg = (
+                    f"❌ 훈련 프로세스가 즉시 종료되었습니다.\n\n"
+                    f"Return Code: {return_code}\n\n"
+                    f"Stderr:\n{stderr_output}\n\n"
+                    f"Stdout:\n{stdout_output}"
+                )
+
+                print(error_msg)
+                self.trigger_callback('error', {'message': error_msg})
+                self.is_training = False
+                return
+
+            print("✅ 프로세스가 정상적으로 시작되었습니다.")
             self.is_training = True
-            
+
             # 로그 모니터링 스레드 시작
             self.monitor_thread = threading.Thread(target=self._monitor_training)
             self.monitor_thread.daemon = True
             self.monitor_thread.start()
-            
+
             self.trigger_callback('training_started', {'config': config})
-            
+
         except Exception as e:
-            self.trigger_callback('error', {'message': f"훈련 시작 실패: {e}"})
+            error_msg = f"훈련 시작 실패: {e}\n{traceback.format_exc()}"
+            print(error_msg)
+            self.trigger_callback('error', {'message': error_msg})
             raise
 
     def get_available_hyperparams(self):
@@ -307,14 +340,45 @@ class YOLOv7Trainer:
         return descriptions.get(filename, '📝 Custom hyperparameters')
     def _monitor_training(self):
         """훈련 모니터링 (별도 스레드) - 안전성 강화"""
+        stderr_thread = None
         try:
+            # stderr 모니터링 스레드 시작 (별도)
+            def monitor_stderr():
+                while self.is_training and self.process:
+                    try:
+                        if self.process.stderr:
+                            line = self.process.stderr.readline()
+                            if line:
+                                line = line.strip()
+                                if line:
+                                    print(f"[STDERR] {line}")
+                                    self.trigger_callback('log_update', {'line': f"⚠️ {line}"})
+                    except:
+                        break
+
+            stderr_thread = threading.Thread(target=monitor_stderr)
+            stderr_thread.daemon = True
+            stderr_thread.start()
+
+            # stdout 모니터링
             while self.is_training and self.process and not self._stop_event.is_set():
                 try:
-                    # stdout에서 한 줄씩 읽기 (타임아웃 추가)
+                    # ✨ 먼저 프로세스 상태 확인
+                    if self.process.poll() is not None:
+                        print("프로세스가 종료되었습니다.")
+                        break
+
+                    # stdout에서 한 줄씩 읽기
                     line = self.process.stdout.readline()
 
+                    # ✨ EOF이고 프로세스가 종료된 경우만 break
                     if not line:
-                        break
+                        if self.process.poll() is not None:
+                            break
+                        else:
+                            # 프로세스는 살아있지만 출력이 없음 (대기)
+                            time.sleep(0.1)
+                            continue
 
                     line = line.strip()
                     if line:
@@ -339,6 +403,7 @@ class YOLOv7Trainer:
 
                 except Exception as e:
                     if self.is_training:  # 정상 종료가 아닌 경우만 오류 보고
+                        print(f"모니터링 오류: {e}")
                         self.trigger_callback('error', {'message': f"모니터링 오류: {e}"})
                     break
 
@@ -350,7 +415,16 @@ class YOLOv7Trainer:
                     if return_code == 0:
                         self.trigger_callback('training_complete', {'success': True})
                     else:
-                        self.trigger_callback('training_complete', {'success': False, 'return_code': return_code})
+                        # stderr 내용 읽기
+                        if self.process.stderr:
+                            stderr_remaining = self.process.stderr.read()
+                            if stderr_remaining:
+                                print(f"[STDERR 최종]: {stderr_remaining}")
+
+                        self.trigger_callback('training_complete', {
+                            'success': False,
+                            'return_code': return_code
+                        })
 
         finally:
             # 스레드 종료 시 리소스 정리
