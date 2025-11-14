@@ -7,7 +7,7 @@ import json
 import os
 from datetime import datetime, timedelta
 import numpy as np
-from utils.system_utils import get_available_devices
+from utils.system_utils import get_available_devices, get_optimal_workers, validate_workers
 
 try:
     import matplotlib.pyplot as plt
@@ -96,7 +96,8 @@ class MainWindow:
         self.epochs_var = tk.IntVar(value=300)
         self.batch_size_var = tk.IntVar(value=16)
         self.learning_rate_var = tk.DoubleVar(value=0.01)
-        self.workers_var = tk.IntVar(value=8)
+        # 플랫폼에 맞는 최적의 workers 수 자동 설정 (Windows: 0, Linux: 4~8)
+        self.workers_var = tk.IntVar(value=get_optimal_workers())
         self.device_var = tk.StringVar(value=default_device)
         
         # 훈련 옵션
@@ -1977,11 +1978,22 @@ class MainWindow:
         """Enhanced 훈련 시작 - 실제 YOLOv7 학습"""
         if self.is_training:
             return
-        
+
         # 설정 검증
         if not self.validate_settings():
             return
-        
+
+        # Windows 환경에서 workers 수 검증 및 경고
+        workers = self.workers_var.get()
+        is_safe, warning_msg = validate_workers(workers)
+        if not is_safe:
+            result = messagebox.askyesno("Workers 설정 경고", warning_msg)
+            if result:  # Yes 선택 시 workers를 0으로 변경
+                self.workers_var.set(0)
+                self.workers_label.config(text="0")
+                self.add_log_entry(f"⚙️ Workers를 {workers} → 0으로 변경했습니다 (Windows 최적화)")
+            # No 선택 시 그대로 진행 (사용자 책임)
+
         # 진행사항 탭으로 전환
         self.notebook.select(1)
         

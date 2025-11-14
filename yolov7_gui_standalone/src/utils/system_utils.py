@@ -86,6 +86,66 @@ def get_available_devices():
         print(f"⚠️ GPU 감지 오류: {e}")
         return (["0", "cpu"], "0")
 
+def get_optimal_workers():
+    """
+    플랫폼에 맞는 최적의 DataLoader workers 수를 반환
+
+    Windows는 multiprocessing 메모리 문제로 인해 workers를 제한
+
+    Returns:
+        int: 권장 workers 수
+
+    Examples:
+        Windows: 0 (메인 프로세스만, 가장 안정적)
+        Linux: 4~8 (멀티프로세싱 활용)
+    """
+    import platform
+
+    # Windows 감지
+    is_windows = sys.platform.startswith('win') or platform.system() == 'Windows'
+
+    if is_windows:
+        # Windows: workers=0 권장 (메모리 문제 방지)
+        # RTX 4090 같은 고성능 GPU라면 workers=0으로도 충분히 빠름
+        return 0
+    else:
+        # Linux/Unix: CPU 코어 수 기반으로 설정
+        try:
+            cpu_count = multiprocessing.cpu_count()
+            # 최대 8개까지만
+            return min(cpu_count // 2, 8)
+        except:
+            return 4
+
+def validate_workers(workers, show_warning=False):
+    """
+    설정된 workers 수가 적절한지 검증
+
+    Args:
+        workers: 설정하려는 workers 수
+        show_warning: 경고 메시지 출력 여부
+
+    Returns:
+        tuple: (is_safe, warning_message)
+    """
+    import platform
+
+    is_windows = sys.platform.startswith('win') or platform.system() == 'Windows'
+
+    if is_windows and workers > 2:
+        warning_msg = (
+            f"⚠️ Windows에서 Workers={workers}는 메모리 문제를 일으킬 수 있습니다.\n\n"
+            f"권장값:\n"
+            f"  • workers=0 (가장 안정적, 고성능 GPU에 적합)\n"
+            f"  • workers=1~2 (약간 더 빠름)\n\n"
+            f"현재 값({workers})을 사용하면 훈련 중 다음 오류가 발생할 수 있습니다:\n"
+            f"  'OSError: [WinError 1455] 페이징 파일이 너무 작습니다'\n\n"
+            f"Workers를 0~2로 변경하시겠습니까?"
+        )
+        return (False, warning_msg)
+
+    return (True, "")
+
 def get_system_info():
     """시스템 정보 수집"""
     info = {
