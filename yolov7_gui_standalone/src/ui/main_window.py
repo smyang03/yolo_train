@@ -268,37 +268,73 @@ class MainWindow:
         ttk.Button(dataset_path_frame, text="Browse", 
                 command=self.browse_dataset).pack(side='right', padx=(5, 0))
         
-        # Multiple Dataset Frame (기존 코드 유지)
+        # Multiple Dataset Frame (완전히 새로 구현)
         self.multiple_dataset_frame = ttk.Frame(dataset_frame)
-        
-        ttk.Label(self.multiple_dataset_frame, text="Multiple Datasets:").pack(anchor='w')
-        self.dataset_listbox = tk.Listbox(self.multiple_dataset_frame, height=4)
-        self.dataset_listbox.pack(fill='x', pady=2)
-        
+
+        ttk.Label(self.multiple_dataset_frame, text="📁 Select Multiple Datasets:",
+                 font=('Arial', 11, 'bold')).pack(anchor='w', pady=(0, 5))
+
+        # 데이터셋 리스트 (경로 저장용)
+        self.dataset_paths = []  # 실제 경로 저장
+
+        # 리스트박스와 스크롤바
+        listbox_frame = ttk.Frame(self.multiple_dataset_frame)
+        listbox_frame.pack(fill='both', expand=True, pady=5)
+
+        scrollbar = ttk.Scrollbar(listbox_frame)
+        scrollbar.pack(side='right', fill='y')
+
+        self.dataset_listbox = tk.Listbox(listbox_frame, height=6, yscrollcommand=scrollbar.set)
+        self.dataset_listbox.pack(side='left', fill='both', expand=True)
+        scrollbar.config(command=self.dataset_listbox.yview)
+
+        # 버튼들
         dataset_buttons_frame = ttk.Frame(self.multiple_dataset_frame)
-        dataset_buttons_frame.pack(fill='x', pady=2)
-        
-        ttk.Button(dataset_buttons_frame, text="Add Dataset", 
+        dataset_buttons_frame.pack(fill='x', pady=5)
+
+        ttk.Button(dataset_buttons_frame, text="➕ Add Dataset Folder",
                 command=self.add_dataset).pack(side='left', padx=(0, 5))
-        ttk.Button(dataset_buttons_frame, text="Remove Selected", 
-                command=self.remove_dataset).pack(side='left')
-        
-        # Merge Options
-        merge_frame = ttk.LabelFrame(self.multiple_dataset_frame, text="Merge Options", padding=5)
-        merge_frame.pack(fill='x', pady=5)
-        
-        ttk.Checkbutton(merge_frame, text="Shuffle merged data", variable=self.shuffle_var).pack(anchor='w')
-        ttk.Checkbutton(merge_frame, text="Balance classes", variable=self.balance_var).pack(anchor='w')
-        ttk.Checkbutton(merge_frame, text="Remove duplicates", variable=self.remove_duplicates_var).pack(anchor='w')
-        
-        # Split Ratio
-        ttk.Label(merge_frame, text="Train/Valid Split Ratio:").pack(anchor='w', pady=(5, 0))
-        split_scale = ttk.Scale(merge_frame, from_=0.1, to=0.9, variable=self.split_ratio_var, 
-                            orient='horizontal', command=self.update_split_ratio_label)
-        split_scale.pack(fill='x', pady=2)
-        
-        self.split_ratio_label = ttk.Label(merge_frame, text="80% / 20%")
-        self.split_ratio_label.pack(anchor='w')
+        ttk.Button(dataset_buttons_frame, text="➖ Remove Selected",
+                command=self.remove_dataset).pack(side='left', padx=(0, 5))
+        ttk.Button(dataset_buttons_frame, text="🗑️ Clear All",
+                command=self.clear_datasets).pack(side='left')
+
+        # Merge 방식 선택
+        method_frame = ttk.LabelFrame(self.multiple_dataset_frame, text="🔧 Merge Method", padding=10)
+        method_frame.pack(fill='x', pady=10)
+
+        self.merge_method_var = tk.StringVar(value="list")
+
+        ttk.Radiobutton(method_frame, text="📝 List Files (권장 - 모든 OS 호환)",
+                       variable=self.merge_method_var, value="list").pack(anchor='w', pady=2)
+        ttk.Radiobutton(method_frame, text="🔗 Symbolic Links (빠름 - Linux/Mac)",
+                       variable=self.merge_method_var, value="symlink").pack(anchor='w', pady=2)
+        ttk.Radiobutton(method_frame, text="📂 Copy Files (느림 - 완전 복사)",
+                       variable=self.merge_method_var, value="copy").pack(anchor='w', pady=2)
+
+        ttk.Label(method_frame, text="ℹ️ List Files: train.txt/valid.txt에 경로 저장",
+                 font=('Arial', 8), foreground='gray').pack(anchor='w', pady=(5, 0))
+
+        # Merge 버튼
+        merge_button_frame = ttk.Frame(self.multiple_dataset_frame)
+        merge_button_frame.pack(fill='x', pady=10)
+
+        self.merge_button = ttk.Button(merge_button_frame, text="🔀 Merge Datasets",
+                                       command=self.merge_datasets,
+                                       style='Accent.TButton')
+        self.merge_button.pack(fill='x')
+
+        # 진행률 표시
+        self.merge_progress_var = tk.DoubleVar()
+        self.merge_progress_bar = ttk.Progressbar(self.multiple_dataset_frame,
+                                                  variable=self.merge_progress_var,
+                                                  maximum=100)
+        # 처음엔 숨김
+
+        # Merge 결과 라벨
+        self.merge_result_label = ttk.Label(self.multiple_dataset_frame, text="",
+                                           foreground='green', font=('Arial', 9, 'bold'))
+        self.merge_result_label.pack(pady=5)
         
         # 모델 설정들
         self.create_model_config_section(dataset_frame)
@@ -1590,24 +1626,172 @@ class MainWindow:
         self.add_log_entry(f"Dataset mode changed to: {mode}")
     
     def add_dataset(self):
-        """데이터셋 추가"""
-        filenames = filedialog.askopenfilenames(
-            title="Select Dataset Files",
-            filetypes=[("YAML files", "*.yaml *.yml"), ("Text files", "*.txt")]
+        """데이터셋 폴더 추가"""
+        folder_path = filedialog.askdirectory(
+            title="Select Dataset Folder (containing train/valid or images/labels)"
         )
-        
-        for filename in filenames:
-            self.dataset_listbox.insert(tk.END, os.path.basename(filename))
-        
-        if filenames:
-            self.add_log_entry(f"Added {len(filenames)} dataset file(s)")
-    
+
+        if folder_path:
+            folder_path = Path(folder_path)
+
+            # 중복 체크
+            if str(folder_path) in self.dataset_paths:
+                messagebox.showwarning("중복", "이미 추가된 데이터셋입니다.")
+                return
+
+            # 데이터셋 유효성 간단 체크
+            has_train = (folder_path / 'train').exists() or (folder_path / 'images' / 'train').exists()
+            has_valid = (folder_path / 'valid').exists() or (folder_path / 'images' / 'valid').exists() or \
+                       (folder_path / 'val').exists() or (folder_path / 'images' / 'val').exists()
+
+            if not (has_train or has_valid):
+                result = messagebox.askyesno(
+                    "경고",
+                    f"'{folder_path.name}' 폴더에서 train/valid 폴더를 찾을 수 없습니다.\n"
+                    "그래도 추가하시겠습니까?"
+                )
+                if not result:
+                    return
+
+            # 리스트에 추가
+            self.dataset_paths.append(str(folder_path))
+            self.dataset_listbox.insert(tk.END, folder_path.name)
+
+            self.add_log_entry(f"✅ 데이터셋 추가: {folder_path.name}")
+            self.merge_result_label.config(text=f"총 {len(self.dataset_paths)}개 데이터셋 추가됨")
+
     def remove_dataset(self):
         """선택된 데이터셋 제거"""
         selection = self.dataset_listbox.curselection()
         if selection:
-            self.dataset_listbox.delete(selection)
-            self.add_log_entry("Removed selected dataset")
+            index = selection[0]
+            removed_path = self.dataset_paths[index]
+
+            self.dataset_listbox.delete(index)
+            self.dataset_paths.pop(index)
+
+            self.add_log_entry(f"❌ 데이터셋 제거: {Path(removed_path).name}")
+            self.merge_result_label.config(text=f"총 {len(self.dataset_paths)}개 데이터셋")
+
+    def clear_datasets(self):
+        """모든 데이터셋 제거"""
+        if self.dataset_paths:
+            result = messagebox.askyesno("확인", "모든 데이터셋을 제거하시겠습니까?")
+            if result:
+                self.dataset_listbox.delete(0, tk.END)
+                self.dataset_paths.clear()
+                self.add_log_entry("🗑️ 모든 데이터셋 제거됨")
+                self.merge_result_label.config(text="")
+
+    def merge_datasets(self):
+        """데이터셋 병합 실행"""
+        if len(self.dataset_paths) < 2:
+            messagebox.showwarning("경고", "최소 2개 이상의 데이터셋이 필요합니다.")
+            return
+
+        # 출력 디렉토리 선택
+        output_dir = filedialog.askdirectory(
+            title="Select Output Directory for Merged Dataset"
+        )
+
+        if not output_dir:
+            return
+
+        output_dir = Path(output_dir) / "merged_dataset"
+
+        # 병합 시작
+        self.add_log_entry("=" * 50)
+        self.add_log_entry("🔀 데이터셋 병합 시작...")
+        self.add_log_entry("=" * 50)
+
+        # 진행률 바 표시
+        self.merge_progress_bar.pack(fill='x', pady=5)
+        self.merge_progress_var.set(0)
+        self.merge_button.config(state='disabled')
+
+        # 별도 스레드에서 병합 수행
+        import threading
+
+        def merge_thread():
+            try:
+                from core.dataset_merger import DatasetMerger
+
+                merger = DatasetMerger(output_dir)
+
+                # 데이터셋 추가
+                for dataset_path in self.dataset_paths:
+                    self.add_log_entry(f"📁 추가: {Path(dataset_path).name}")
+                    merger.add_dataset(Path(dataset_path))
+
+                # 요약 정보 출력
+                summary = merger.get_merge_summary()
+                for line in summary.split('\n'):
+                    self.add_log_entry(line)
+
+                # 병합 실행
+                method = self.merge_method_var.get()
+                self.add_log_entry(f"🔧 병합 방식: {method}")
+
+                def update_progress(percent):
+                    self.root.after(0, lambda: self.merge_progress_var.set(percent))
+
+                result = merger.merge(method=method, show_progress=update_progress)
+
+                # 완료
+                self.root.after(0, lambda: self._on_merge_complete(result, output_dir))
+
+            except Exception as e:
+                error_msg = f"❌ 병합 실패: {e}"
+                self.root.after(0, lambda: self._on_merge_error(error_msg))
+                import traceback
+                traceback.print_exc()
+
+        thread = threading.Thread(target=merge_thread, daemon=True)
+        thread.start()
+
+    def _on_merge_complete(self, result, output_dir):
+        """병합 완료 처리"""
+        self.add_log_entry("=" * 50)
+        self.add_log_entry("✅ 데이터셋 병합 완료!")
+        self.add_log_entry(f"   방식: {result['method']}")
+        self.add_log_entry(f"   Train: {result['train_count']} 이미지")
+        self.add_log_entry(f"   Valid: {result['valid_count']} 이미지")
+        self.add_log_entry(f"   총: {result['total']} 이미지")
+        self.add_log_entry(f"   출력 경로: {output_dir}")
+        self.add_log_entry("=" * 50)
+
+        self.merge_progress_bar.pack_forget()
+        self.merge_button.config(state='normal')
+
+        self.merge_result_label.config(
+            text=f"✅ 병합 완료! {result['total']} 이미지",
+            foreground='green'
+        )
+
+        # 자동으로 병합된 데이터셋을 Single Dataset 경로로 설정
+        data_yaml_path = output_dir / 'data.yaml'
+        if data_yaml_path.exists():
+            result_msg = messagebox.askyesno(
+                "병합 완료",
+                f"데이터셋 병합이 완료되었습니다!\n\n"
+                f"총 {result['total']} 이미지\n"
+                f"출력: {output_dir}\n\n"
+                f"Single Dataset 모드로 전환하고 병합된 데이터셋을 사용하시겠습니까?"
+            )
+
+            if result_msg:
+                self.dataset_mode.set("single")
+                self.dataset_path_var.set(str(data_yaml_path))
+                self.on_dataset_mode_change()
+                self.add_log_entry(f"📂 데이터셋 경로 설정: {data_yaml_path}")
+
+    def _on_merge_error(self, error_msg):
+        """병합 오류 처리"""
+        self.add_log_entry(error_msg)
+        self.merge_progress_bar.pack_forget()
+        self.merge_button.config(state='normal')
+        self.merge_result_label.config(text="❌ 병합 실패", foreground='red')
+        messagebox.showerror("오류", error_msg)
 
     def create_hyperparams_section(self, parent):
         """하이퍼파라미터 설정 섹션 - UI에 통합"""
