@@ -184,3 +184,117 @@ def get_system_info():
         info['opencv_version'] = 'Not installed'
 
     return info
+
+def extract_classes_from_pt(pt_path):
+    """
+    PyTorch 모델 파일(.pt)에서 클래스 정보를 추출
+
+    Args:
+        pt_path: .pt 파일 경로
+
+    Returns:
+        list: 클래스 이름 리스트, 실패 시 None
+    """
+    try:
+        import torch
+        from pathlib import Path
+
+        if not Path(pt_path).exists():
+            return None
+
+        # 모델 로드 (map_location='cpu'로 GPU 없이도 로드 가능)
+        checkpoint = torch.load(pt_path, map_location='cpu')
+
+        # 클래스 이름 추출 시도
+        # YOLOv7은 보통 'names' 키에 클래스 정보 저장
+        if isinstance(checkpoint, dict):
+            if 'names' in checkpoint:
+                names = checkpoint['names']
+                if isinstance(names, dict):
+                    # {0: 'person', 1: 'bicycle', ...} 형태
+                    return [names[i] for i in sorted(names.keys())]
+                elif isinstance(names, list):
+                    return names
+
+            # 'model' 키 안에 있을 수도 있음
+            if 'model' in checkpoint:
+                model = checkpoint['model']
+                if hasattr(model, 'names'):
+                    names = model.names
+                    if isinstance(names, dict):
+                        return [names[i] for i in sorted(names.keys())]
+                    elif isinstance(names, list):
+                        return names
+
+        return None
+
+    except Exception as e:
+        print(f"⚠️ PT 파일에서 클래스 추출 실패: {e}")
+        return None
+
+def extract_classes_from_yaml(yaml_path):
+    """
+    YAML 파일에서 클래스 정보를 추출
+
+    Args:
+        yaml_path: .yaml 파일 경로
+
+    Returns:
+        list: 클래스 이름 리스트, 실패 시 None
+    """
+    try:
+        import yaml
+        from pathlib import Path
+
+        if not Path(yaml_path).exists():
+            return None
+
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+
+        if not isinstance(data, dict):
+            return None
+
+        # 'names' 키에서 클래스 정보 추출
+        if 'names' in data:
+            names = data['names']
+            if isinstance(names, dict):
+                # {0: 'person', 1: 'bicycle', ...} 형태
+                return [names[i] for i in sorted(names.keys())]
+            elif isinstance(names, list):
+                return names
+
+        return None
+
+    except Exception as e:
+        print(f"⚠️ YAML 파일에서 클래스 추출 실패: {e}")
+        return None
+
+def get_classes_info(pt_path=None, yaml_path=None):
+    """
+    우선순위에 따라 클래스 정보를 추출
+    우선순위: pt 파일 > yaml 파일 > None
+
+    Args:
+        pt_path: .pt 파일 경로 (optional)
+        yaml_path: .yaml 파일 경로 (optional)
+
+    Returns:
+        tuple: (class_list, source)
+            - class_list: 클래스 이름 리스트 또는 None
+            - source: 'pt', 'yaml', 'none'
+    """
+    # 1. PT 파일에서 추출 시도
+    if pt_path:
+        classes = extract_classes_from_pt(pt_path)
+        if classes:
+            return (classes, 'pt')
+
+    # 2. YAML 파일에서 추출 시도
+    if yaml_path:
+        classes = extract_classes_from_yaml(yaml_path)
+        if classes:
+            return (classes, 'yaml')
+
+    # 3. 클래스 정보를 찾지 못함
+    return (None, 'none')
