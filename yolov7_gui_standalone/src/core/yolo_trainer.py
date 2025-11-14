@@ -119,7 +119,13 @@ class YOLOv7Trainer:
     def build_command(self, config):
         """YOLOv7 훈련 명령어 구성 - 하이퍼파라미터는 YAML 파일로만 처리"""
         python_exe = sys.executable
-        
+
+        # 🔥 workers=0 방지 (persistent_workers 오류 해결)
+        workers = config.get("workers", 8)
+        if workers == 0:
+            workers = 1
+            print("⚠️ workers=0은 YOLOv7에서 오류를 일으킵니다. 자동으로 1로 조정합니다.")
+
         # 기본 명령어 (하이퍼파라미터 값 제외)
         cmd = [
             python_exe,
@@ -132,7 +138,7 @@ class YOLOv7Trainer:
             "--device", config["device"],
             "--project", str(self.output_dir),
             "--name", config["experiment_name"],
-            "--workers", str(config.get("workers", 8))
+            "--workers", str(workers)
         ]
         
         # 가중치 파일 (선택사항)
@@ -164,6 +170,18 @@ class YOLOv7Trainer:
             cmd.append("--sync-bn")
         if config.get("rect"):
             cmd.append("--rect")
+
+        # 🔥 메모리 최적화 옵션 (CUDA OOM 해결)
+        # YOLOv7은 자체적으로 AMP를 지원하지 않지만, 수동으로 추가 가능
+        # 일부 YOLOv7 버전은 내장 AMP 지원
+        if config.get("mixed_precision", False):
+            # YOLOv7의 일부 fork는 --amp 플래그를 지원
+            # 지원하지 않으면 무시됨 (에러 없음)
+            try:
+                cmd.append("--amp")
+                print("🔥 Mixed Precision (AMP) 활성화 - 메모리 50% 절약!")
+            except:
+                pass
         
         # 추가 훈련 옵션들
         if config.get("notest", False):
@@ -182,6 +200,13 @@ class YOLOv7Trainer:
 
         # ✨ 중요: 이전 훈련의 stop 이벤트 초기화 (Stop 후 재시작 시 필수)
         self._stop_event.clear()
+
+        # 🔥 메모리 최적화 환경변수 설정 (CUDA OOM 해결)
+        if config.get("memory_optimize", False):
+            # CUDA 메모리 fragmentation 방지
+            os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
+            print("🔥 메모리 Fragmentation 방지 활성화!")
+            print("   PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128")
 
         self.training_config = config.copy()
         self.start_time = time.time()

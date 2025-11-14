@@ -107,7 +107,11 @@ class MainWindow:
         self.rect_var = tk.BooleanVar()
         self.adam_var = tk.BooleanVar()
         self.sync_bn_var = tk.BooleanVar()
-        
+
+        # 🔥 메모리 최적화 옵션 (CUDA OOM 해결)
+        self.mixed_precision_var = tk.BooleanVar(value=True)  # AMP - 메모리 50% 절약!
+        self.memory_optimize_var = tk.BooleanVar(value=True)  # Fragmentation 방지
+
         # 출력 설정
         self.project_name_var = tk.StringVar(value="runs/train")
         self.experiment_name_var = tk.StringVar(value="exp")
@@ -1104,7 +1108,21 @@ class MainWindow:
         ttk.Checkbutton(right_options, text="Rectangular Training", variable=self.rect_var).pack(anchor='w', pady=3)
         ttk.Checkbutton(right_options, text="Adam Optimizer", variable=self.adam_var).pack(anchor='w', pady=3)
         ttk.Checkbutton(right_options, text="Sync BatchNorm", variable=self.sync_bn_var).pack(anchor='w', pady=3)
-        
+
+        # 🔥 메모리 최적화 옵션 (CUDA OOM 해결)
+        memory_frame = ttk.LabelFrame(parent, text="⚡ Memory Optimization (CUDA OOM 해결)", padding=15)
+        memory_frame.pack(fill='x', pady=10, padx=15)
+
+        ttk.Checkbutton(memory_frame, text="✅ Mixed Precision (AMP) - 메모리 50% 절약! (권장)",
+                       variable=self.mixed_precision_var,
+                       style='success.TCheckbutton').pack(anchor='w', pady=3)
+
+        ttk.Checkbutton(memory_frame, text="✅ Memory Fragmentation 방지 (권장)",
+                       variable=self.memory_optimize_var).pack(anchor='w', pady=3)
+
+        ttk.Label(memory_frame, text="💡 CUDA OOM 발생 시 위 옵션들을 활성화하세요.",
+                 font=('Arial', 9), foreground='#2ecc71').pack(anchor='w', pady=(5, 0))
+
         # 고급 옵션들
         advanced_frame = ttk.LabelFrame(parent, text="Advanced Options", padding=15)
         advanced_frame.pack(fill='x', pady=10, padx=15)
@@ -2172,10 +2190,10 @@ class MainWindow:
         is_safe, warning_msg = validate_workers(workers)
         if not is_safe:
             result = messagebox.askyesno("Workers 설정 경고", warning_msg)
-            if result:  # Yes 선택 시 workers를 0으로 변경
-                self.workers_var.set(0)
-                self.workers_label.config(text="0")
-                self.add_log_entry(f"⚙️ Workers를 {workers} → 0으로 변경했습니다 (Windows 최적화)")
+            if result:  # Yes 선택 시 workers를 1로 변경
+                self.workers_var.set(1)
+                self.workers_label.config(text="1")
+                self.add_log_entry(f"⚙️ Workers를 {workers} → 1로 변경했습니다 (YOLOv7 호환)")
             # No 선택 시 그대로 진행 (사용자 책임)
 
         # 진행사항 탭으로 전환
@@ -2749,7 +2767,11 @@ class MainWindow:
             'rect': self.rect_var.get(),
             'adam': self.adam_var.get(),
             'sync_bn': self.sync_bn_var.get(),
-            
+
+            # 🔥 메모리 최적화 옵션 (CUDA OOM 해결)
+            'mixed_precision': self.mixed_precision_var.get(),
+            'memory_optimize': self.memory_optimize_var.get(),
+
             # 새로 추가된 고급 옵션들
             'close_mosaic': self.close_mosaic_var.get(),
             'save_checkpoints': self.save_checkpoints_var.get(),

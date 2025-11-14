@@ -91,12 +91,13 @@ def get_optimal_workers():
     플랫폼에 맞는 최적의 DataLoader workers 수를 반환
 
     Windows는 multiprocessing 메모리 문제로 인해 workers를 제한
+    ⚠️ workers=0은 persistent_workers 오류를 일으킬 수 있어 최소 1로 설정
 
     Returns:
         int: 권장 workers 수
 
     Examples:
-        Windows: 0 (메인 프로세스만, 가장 안정적)
+        Windows: 1 (persistent_workers 호환, 안정적)
         Linux: 4~8 (멀티프로세싱 활용)
     """
     import platform
@@ -105,9 +106,9 @@ def get_optimal_workers():
     is_windows = sys.platform.startswith('win') or platform.system() == 'Windows'
 
     if is_windows:
-        # Windows: workers=0 권장 (메모리 문제 방지)
-        # RTX 4090 같은 고성능 GPU라면 workers=0으로도 충분히 빠름
-        return 0
+        # Windows: workers=1 권장 (0은 persistent_workers 오류 발생)
+        # workers=1이면 메모리 문제 없으면서도 YOLOv7 호환
+        return 1
     else:
         # Linux/Unix: CPU 코어 수 기반으로 설정
         try:
@@ -132,15 +133,25 @@ def validate_workers(workers, show_warning=False):
 
     is_windows = sys.platform.startswith('win') or platform.system() == 'Windows'
 
+    # ⚠️ workers=0은 persistent_workers 오류 발생!
+    if workers == 0:
+        warning_msg = (
+            f"⚠️ Workers=0은 YOLOv7에서 오류를 일으킵니다!\n\n"
+            f"오류 메시지:\n"
+            f"  'ValueError: persistent_workers option needs num_workers > 0'\n\n"
+            f"Workers를 1로 변경하시겠습니까? (권장)"
+        )
+        return (False, warning_msg)
+
     if is_windows and workers > 2:
         warning_msg = (
             f"⚠️ Windows에서 Workers={workers}는 메모리 문제를 일으킬 수 있습니다.\n\n"
             f"권장값:\n"
-            f"  • workers=0 (가장 안정적, 고성능 GPU에 적합)\n"
-            f"  • workers=1~2 (약간 더 빠름)\n\n"
+            f"  • workers=1 (가장 안정적, YOLOv7 호환)\n"
+            f"  • workers=2 (약간 더 빠름)\n\n"
             f"현재 값({workers})을 사용하면 훈련 중 다음 오류가 발생할 수 있습니다:\n"
             f"  'OSError: [WinError 1455] 페이징 파일이 너무 작습니다'\n\n"
-            f"Workers를 0~2로 변경하시겠습니까?"
+            f"Workers를 1로 변경하시겠습니까?"
         )
         return (False, warning_msg)
 
