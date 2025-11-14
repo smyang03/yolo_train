@@ -7,7 +7,7 @@ import json
 import os
 from datetime import datetime, timedelta
 import numpy as np
-from utils.system_utils import get_available_devices, get_optimal_workers, validate_workers
+from utils.system_utils import get_available_devices, get_optimal_workers, validate_workers, get_classes_info
 
 try:
     import matplotlib.pyplot as plt
@@ -197,7 +197,15 @@ class MainWindow:
         self.video_device_var = tk.StringVar(value=default_device)
         self.video_output1_var = tk.StringVar()  # 결과 영상 1 경로
         self.video_output2_var = tk.StringVar()  # 결과 영상 2 경로
+        self.video_fps_var = tk.IntVar(value=30)  # 동영상 FPS 설정
         self.is_inferencing = False
+
+        # 🎯 클래스 정보 관련 변수
+        self.available_classes = []  # 사용 가능한 클래스 리스트
+        self.class_source = 'none'  # 클래스 정보 출처: 'pt', 'yaml', 'none'
+        self.selected_classes_eval = []  # 평가에서 선택된 클래스 ID 리스트
+        self.selected_classes_video = []  # 동영상 추론에서 선택된 클래스 ID 리스트
+        self.selected_classes_result = 'all'  # 결과 그래프에서 선택된 클래스 ('all' 또는 특정 클래스)
 
     def create_ui(self):
         """Enhanced UI 생성"""
@@ -1357,41 +1365,55 @@ class MainWindow:
         scrollbar.pack(side="right", fill="y")
     
     def create_class_performance_section(self, parent):
-        """Class-specific Performance 섹션"""
-        class_frame = ttk.LabelFrame(parent, text="📋 Class-specific Performance", padding=10)
+        """Class-specific Performance 섹션 - 동적 클래스 로딩"""
+        class_frame = ttk.LabelFrame(parent, text="📋 Class-specific Performance (클래스별 성능)", padding=10)
         class_frame.pack(fill='x', pady=10)
-        
+
+        # Class 정보 상태 표시
+        status_frame = ttk.Frame(class_frame)
+        status_frame.pack(fill='x', pady=5)
+
+        ttk.Label(status_frame, text="클래스 정보:").pack(side='left', padx=(0, 5))
+        self.class_info_label = ttk.Label(status_frame, text="로드 안 됨", font=('Arial', 9), foreground='gray')
+        self.class_info_label.pack(side='left', padx=(0, 10))
+
+        ttk.Button(status_frame, text="🔄 Refresh Classes", command=self.refresh_classes).pack(side='left')
+
         # Class 선택기
         selector_frame = ttk.Frame(class_frame)
         selector_frame.pack(fill='x', pady=5)
-        
+
         ttk.Label(selector_frame, text="Select Class:").pack(side='left', padx=(0, 10))
-        
-        class_combo = ttk.Combobox(selector_frame, textvariable=self.class_var, width=30)
-        class_combo['values'] = ["All Classes (Overall)", "Class 0: Person", "Class 1: Bicycle", 
-                                "Class 2: Car", "Class 3: Motorcycle"]
-        class_combo.pack(side='left')
-        
+
+        self.class_combo = ttk.Combobox(selector_frame, textvariable=self.class_var, width=40, state='readonly')
+        self.class_combo['values'] = ["All Classes (Overall)"]
+        self.class_combo.current(0)
+        self.class_combo.pack(side='left')
+        self.class_combo.bind('<<ComboboxSelected>>', self.on_class_selected)
+
+        ttk.Label(selector_frame, text="💡 모델 학습 후 또는 파일 선택 후 Refresh 클릭",
+                 font=('Arial', 8), foreground='gray').pack(side='left', padx=(10, 0))
+
         # Class 메트릭 표시
         class_metrics_frame = ttk.Frame(class_frame)
         class_metrics_frame.pack(fill='x', pady=10)
-        
+
         class_metrics = [
             ("P:", "class_precision", "#e74c3c"),
             ("R:", "class_recall", "#2ecc71"),
             ("AP50:", "class_ap50", "#f39c12"),
             ("AP95:", "class_ap95", "#9b59b6")
         ]
-        
+
         for name, var_name, color in class_metrics:
             metric_frame = ttk.Frame(class_metrics_frame, relief='solid', borderwidth=1)
             metric_frame.pack(side='left', fill='x', expand=True, padx=2, pady=2)
-            
+
             ttk.Label(metric_frame, text=name, font=('Arial', 10, 'bold')).pack(side='left', padx=5)
-            
+
             value_label = ttk.Label(metric_frame, text="-", font=('Arial', 12, 'bold'))
             value_label.pack(side='right', padx=5)
-            
+
             setattr(self, f"{var_name}_label", value_label)
     
     def create_models_tab(self):
@@ -1650,6 +1672,35 @@ class MainWindow:
         ttk.Label(options_grid, text="Device:").grid(row=2, column=0, sticky='w', padx=5, pady=5)
         ttk.Combobox(options_grid, textvariable=self.eval_device_var, values=self.available_devices, width=12).grid(row=2, column=1, sticky='w', padx=5, pady=5)
 
+        # 클래스 선택 (다중 선택)
+        class_frame = ttk.LabelFrame(options_frame, text="🎯 Class Filter (선택 사항)", padding=10)
+        class_frame.pack(fill='x', pady=10)
+
+        ttk.Label(class_frame, text="특정 클래스만 평가하려면 선택하세요 (미선택 시 전체 클래스):").pack(anchor='w', pady=(0, 5))
+
+        # 클래스 리스트박스 (다중 선택 가능)
+        listbox_frame = ttk.Frame(class_frame)
+        listbox_frame.pack(fill='both', expand=True, pady=5)
+
+        eval_class_scrollbar = ttk.Scrollbar(listbox_frame)
+        eval_class_scrollbar.pack(side='right', fill='y')
+
+        self.eval_class_listbox = tk.Listbox(listbox_frame, height=6, selectmode='multiple',
+                                             yscrollcommand=eval_class_scrollbar.set)
+        self.eval_class_listbox.pack(side='left', fill='both', expand=True)
+        eval_class_scrollbar.config(command=self.eval_class_listbox.yview)
+
+        self.eval_class_listbox.insert('end', "클래스 정보를 로드하려면 모델 또는 데이터셋을 선택하세요")
+
+        # 클래스 로드 버튼
+        class_btn_frame = ttk.Frame(class_frame)
+        class_btn_frame.pack(fill='x', pady=5)
+
+        ttk.Button(class_btn_frame, text="🔄 Load Classes from Model/Data",
+                  command=self.load_classes_for_eval).pack(side='left', padx=(0, 5))
+        ttk.Button(class_btn_frame, text="Clear Selection",
+                  command=lambda: self.eval_class_listbox.selection_clear(0, 'end')).pack(side='left')
+
         # 실행 버튼
         start_button_frame = ttk.Frame(scrollable_frame)
         start_button_frame.pack(fill='x', pady=15, padx=15)
@@ -1772,6 +1823,41 @@ class MainWindow:
         # Device
         ttk.Label(options_grid, text="Device:").grid(row=1, column=2, sticky='w', padx=5, pady=5)
         ttk.Combobox(options_grid, textvariable=self.video_device_var, values=self.available_devices, width=12).grid(row=1, column=3, sticky='w', padx=5, pady=5)
+
+        # FPS 설정
+        ttk.Label(options_grid, text="Output FPS:").grid(row=2, column=0, sticky='w', padx=5, pady=5)
+        ttk.Spinbox(options_grid, from_=1, to=120, textvariable=self.video_fps_var, width=12).grid(row=2, column=1, sticky='w', padx=5, pady=5)
+
+        ttk.Label(options_grid, text="💡 출력 동영상의 FPS (기본: 30)", font=('Arial', 8), foreground='gray').grid(row=2, column=2, columnspan=2, sticky='w', padx=5)
+
+        # 클래스 선택 (다중 선택)
+        class_frame = ttk.LabelFrame(options_frame, text="🎯 Class Filter (선택 사항)", padding=10)
+        class_frame.pack(fill='x', pady=10)
+
+        ttk.Label(class_frame, text="특정 클래스만 탐지하려면 선택하세요 (미선택 시 전체 클래스):").pack(anchor='w', pady=(0, 5))
+
+        # 클래스 리스트박스 (다중 선택 가능)
+        listbox_frame = ttk.Frame(class_frame)
+        listbox_frame.pack(fill='both', expand=True, pady=5)
+
+        video_class_scrollbar = ttk.Scrollbar(listbox_frame)
+        video_class_scrollbar.pack(side='right', fill='y')
+
+        self.video_class_listbox = tk.Listbox(listbox_frame, height=6, selectmode='multiple',
+                                              yscrollcommand=video_class_scrollbar.set)
+        self.video_class_listbox.pack(side='left', fill='both', expand=True)
+        video_class_scrollbar.config(command=self.video_class_listbox.yview)
+
+        self.video_class_listbox.insert('end', "클래스 정보를 로드하려면 모델을 선택하세요")
+
+        # 클래스 로드 버튼
+        class_btn_frame = ttk.Frame(class_frame)
+        class_btn_frame.pack(fill='x', pady=5)
+
+        ttk.Button(class_btn_frame, text="🔄 Load Classes from Model",
+                  command=self.load_classes_for_video).pack(side='left', padx=(0, 5))
+        ttk.Button(class_btn_frame, text="Clear Selection",
+                  command=lambda: self.video_class_listbox.selection_clear(0, 'end')).pack(side='left')
 
         # 실행 버튼
         start_button_frame = ttk.Frame(scrollable_frame)
@@ -3552,6 +3638,14 @@ class MainWindow:
             "--verbose"
         ]
 
+        # 클래스 필터 적용
+        selected_classes = self.get_selected_classes_eval()
+        if selected_classes:
+            cmd.append("--classes")
+            for class_id in selected_classes:
+                cmd.append(str(class_id))
+            self.root.after(0, lambda: self.add_eval_log(f"🎯 선택된 클래스: {selected_classes}"))
+
         self.root.after(0, lambda: self.add_eval_log(f"실행 명령어: {' '.join(cmd)}"))
 
         # 프로세스 실행
@@ -3782,6 +3876,19 @@ class MainWindow:
             "--exist-ok"
         ]
 
+        # 클래스 필터 적용
+        selected_classes = self.get_selected_classes_video()
+        if selected_classes:
+            cmd.append("--classes")
+            for class_id in selected_classes:
+                cmd.append(str(class_id))
+            self.root.after(0, lambda: self.add_video_log(f"🎯 선택된 클래스: {selected_classes}"))
+
+        # FPS 설정 (환경 변수로 전달, detect.py에서 지원하는 경우)
+        fps = self.video_fps_var.get()
+        if fps and fps != 30:
+            self.root.after(0, lambda: self.add_video_log(f"⚙️ Output FPS: {fps} (기본값이 아닌 경우 출력 영상에 적용 시도)"))
+
         self.root.after(0, lambda: self.add_video_log(f"실행 명령어: {' '.join(cmd)}"))
 
         # 프로세스 실행
@@ -3888,3 +3995,130 @@ class MainWindow:
         self.play_result_video(1)
         time.sleep(0.5)  # 약간의 딜레이
         self.play_result_video(2)
+
+    # ==================== 클래스 관련 메서드 ====================
+
+    def refresh_classes(self):
+        """결과 탭의 클래스 정보 새로고침"""
+        # 학습 설정에서 가중치 파일과 데이터셋 경로 가져오기
+        weights_path = self.weights_path_var.get()
+        dataset_path = self.dataset_path_var.get()
+
+        classes, source = get_classes_info(pt_path=weights_path if weights_path else None,
+                                           yaml_path=dataset_path if dataset_path else None)
+
+        self.available_classes = classes if classes else []
+        self.class_source = source
+
+        # 클래스 콤보박스 업데이트
+        if classes:
+            class_values = ["All Classes (Overall)"]
+            for i, class_name in enumerate(classes):
+                class_values.append(f"Class {i}: {class_name}")
+            self.class_combo['values'] = class_values
+            self.class_combo.current(0)
+
+            # 상태 라벨 업데이트
+            source_text = {'pt': '모델 파일', 'yaml': 'YAML 파일', 'none': '없음'}[source]
+            self.class_info_label.config(
+                text=f"{len(classes)}개 클래스 (출처: {source_text})",
+                foreground='green'
+            )
+            self.add_log_entry(f"✅ {len(classes)}개 클래스 로드 완료 (출처: {source_text})")
+        else:
+            self.class_combo['values'] = ["All Classes (Overall)"]
+            self.class_combo.current(0)
+            self.class_info_label.config(text="클래스 정보 없음", foreground='red')
+            self.add_log_entry("⚠️ 클래스 정보를 찾을 수 없습니다. 모델 또는 데이터셋 파일을 확인하세요.")
+
+    def on_class_selected(self, event=None):
+        """결과 탭에서 클래스 선택 시 호출"""
+        selected = self.class_var.get()
+        if selected.startswith("All"):
+            self.selected_classes_result = 'all'
+        else:
+            # "Class 0: person" 형식에서 클래스 ID 추출
+            try:
+                class_id = int(selected.split(':')[0].split()[-1])
+                self.selected_classes_result = class_id
+                self.add_log_entry(f"클래스 {class_id} 선택됨")
+            except:
+                self.selected_classes_result = 'all'
+
+    def load_classes_for_eval(self):
+        """평가 탭의 클래스 로드"""
+        model1_path = self.eval_model1_var.get()
+        data_path = self.eval_data_var.get()
+
+        classes, source = get_classes_info(pt_path=model1_path if model1_path else None,
+                                           yaml_path=data_path if data_path else None)
+
+        if classes:
+            self.eval_class_listbox.delete(0, 'end')
+            for i, class_name in enumerate(classes):
+                self.eval_class_listbox.insert('end', f"{i}: {class_name}")
+
+            source_text = {'pt': '모델 파일', 'yaml': 'YAML 파일', 'none': '없음'}[source]
+            self.add_eval_log(f"✅ {len(classes)}개 클래스 로드 완료 (출처: {source_text})")
+            messagebox.showinfo("성공", f"{len(classes)}개 클래스를 로드했습니다.\n출처: {source_text}")
+        else:
+            self.eval_class_listbox.delete(0, 'end')
+            self.eval_class_listbox.insert('end', "클래스 정보를 찾을 수 없습니다")
+            self.add_eval_log("⚠️ 클래스 정보를 찾을 수 없습니다")
+            messagebox.showwarning("경고", "클래스 정보를 찾을 수 없습니다.\n모델 또는 데이터셋 파일을 확인하세요.")
+
+    def load_classes_for_video(self):
+        """동영상 탭의 클래스 로드"""
+        model1_path = self.video_model1_var.get()
+
+        classes, source = get_classes_info(pt_path=model1_path if model1_path else None)
+
+        if classes:
+            self.video_class_listbox.delete(0, 'end')
+            for i, class_name in enumerate(classes):
+                self.video_class_listbox.insert('end', f"{i}: {class_name}")
+
+            source_text = {'pt': '모델 파일', 'yaml': 'YAML 파일', 'none': '없음'}[source]
+            self.add_video_log(f"✅ {len(classes)}개 클래스 로드 완료 (출처: {source_text})")
+            messagebox.showinfo("성공", f"{len(classes)}개 클래스를 로드했습니다.\n출처: {source_text}")
+        else:
+            self.video_class_listbox.delete(0, 'end')
+            self.video_class_listbox.insert('end', "클래스 정보를 찾을 수 없습니다")
+            self.add_video_log("⚠️ 클래스 정보를 찾을 수 없습니다")
+            messagebox.showwarning("경고", "클래스 정보를 찾을 수 없습니다.\n모델 파일을 확인하세요.")
+
+    def get_selected_classes_eval(self):
+        """평가 탭에서 선택된 클래스 ID 리스트 반환"""
+        selected_indices = self.eval_class_listbox.curselection()
+        if not selected_indices:
+            return None  # 전체 클래스
+
+        selected_classes = []
+        for idx in selected_indices:
+            item_text = self.eval_class_listbox.get(idx)
+            if ':' in item_text:
+                try:
+                    class_id = int(item_text.split(':')[0])
+                    selected_classes.append(class_id)
+                except:
+                    pass
+
+        return selected_classes if selected_classes else None
+
+    def get_selected_classes_video(self):
+        """동영상 탭에서 선택된 클래스 ID 리스트 반환"""
+        selected_indices = self.video_class_listbox.curselection()
+        if not selected_indices:
+            return None  # 전체 클래스
+
+        selected_classes = []
+        for idx in selected_indices:
+            item_text = self.video_class_listbox.get(idx)
+            if ':' in item_text:
+                try:
+                    class_id = int(item_text.split(':')[0])
+                    selected_classes.append(class_id)
+                except:
+                    pass
+
+        return selected_classes if selected_classes else None
