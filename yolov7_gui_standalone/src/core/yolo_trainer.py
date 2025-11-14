@@ -119,7 +119,13 @@ class YOLOv7Trainer:
     def build_command(self, config):
         """YOLOv7 훈련 명령어 구성 - 하이퍼파라미터는 YAML 파일로만 처리"""
         python_exe = sys.executable
-        
+
+        # 🔥 workers=0 방지 (persistent_workers 오류 해결)
+        workers = config.get("workers", 8)
+        if workers == 0:
+            workers = 1
+            print("⚠️ workers=0은 YOLOv7에서 오류를 일으킵니다. 자동으로 1로 조정합니다.")
+
         # 기본 명령어 (하이퍼파라미터 값 제외)
         cmd = [
             python_exe,
@@ -132,7 +138,7 @@ class YOLOv7Trainer:
             "--device", config["device"],
             "--project", str(self.output_dir),
             "--name", config["experiment_name"],
-            "--workers", str(config.get("workers", 8))
+            "--workers", str(workers)
         ]
         
         # 가중치 파일 (선택사항)

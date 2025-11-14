@@ -2190,10 +2190,10 @@ class MainWindow:
         is_safe, warning_msg = validate_workers(workers)
         if not is_safe:
             result = messagebox.askyesno("Workers 설정 경고", warning_msg)
-            if result:  # Yes 선택 시 workers를 0으로 변경
-                self.workers_var.set(0)
-                self.workers_label.config(text="0")
-                self.add_log_entry(f"⚙️ Workers를 {workers} → 0으로 변경했습니다 (Windows 최적화)")
+            if result:  # Yes 선택 시 workers를 1로 변경
+                self.workers_var.set(1)
+                self.workers_label.config(text="1")
+                self.add_log_entry(f"⚙️ Workers를 {workers} → 1로 변경했습니다 (YOLOv7 호환)")
             # No 선택 시 그대로 진행 (사용자 책임)
 
         # 진행사항 탭으로 전환
