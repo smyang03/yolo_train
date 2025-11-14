@@ -2663,24 +2663,252 @@ class MainWindow:
     # 콜백 메서드들
     def on_training_started(self, data):
         """훈련 시작 콜백"""
-        pass
-    
+        self.root.after(0, lambda: self._on_training_started_ui(data))
+
+    def _on_training_started_ui(self, data):
+        """훈련 시작 UI 업데이트 (메인 스레드)"""
+        self.is_training = True
+        self.start_time = time.time()
+
+        # 상태 표시 업데이트
+        self.status_text_var.set("🟢 훈련 진행 중")
+        self.add_log_entry("=" * 50)
+        self.add_log_entry("🚀 훈련이 시작되었습니다!")
+        self.add_log_entry("=" * 50)
+
+        # 메트릭 데이터 초기화
+        self.metrics_data = {
+            'epochs': [],
+            'precision': [],
+            'recall': [],
+            'map50': [],
+            'map95': [],
+            'loss': [],
+            'lr': []
+        }
+
     def on_metrics_update(self, metrics):
         """메트릭 업데이트 콜백"""
-        pass
-    
+        self.root.after(0, lambda: self._on_metrics_update_ui(metrics))
+
+    def _on_metrics_update_ui(self, metrics):
+        """메트릭 업데이트 UI (메인 스레드)"""
+        try:
+            # 현재 epoch 업데이트
+            if 'epoch' in metrics:
+                self.current_epoch = metrics['epoch']
+                if hasattr(self, 'current_epoch_label'):
+                    self.current_epoch_label.config(text=f"{metrics['epoch']}/{metrics.get('total_epochs', self.total_epochs)}")
+
+            # GPU 메모리 업데이트
+            if 'gpu_mem' in metrics:
+                if hasattr(self, 'gpu_memory_label'):
+                    self.gpu_memory_label.config(text=metrics['gpu_mem'])
+
+            # Loss 업데이트
+            if 'total_loss' in metrics:
+                if hasattr(self, 'current_loss_label'):
+                    self.current_loss_label.config(text=f"{metrics['total_loss']:.4f}")
+
+            # Precision 업데이트
+            if 'precision' in metrics:
+                if hasattr(self, 'current_precision_summary_label'):
+                    self.current_precision_summary_label.config(text=f"{metrics['precision']:.3f}")
+
+            # Recall 업데이트
+            if 'recall' in metrics:
+                if hasattr(self, 'current_recall_summary_label'):
+                    self.current_recall_summary_label.config(text=f"{metrics['recall']:.3f}")
+
+            # mAP@0.5 업데이트
+            if 'map50' in metrics:
+                if hasattr(self, 'current_map50_summary_label'):
+                    self.current_map50_summary_label.config(text=f"{metrics['map50']:.3f}")
+
+            # mAP@0.5:0.95 업데이트
+            if 'map95' in metrics:
+                if hasattr(self, 'current_map95_summary_label'):
+                    self.current_map95_summary_label.config(text=f"{metrics['map95']:.3f}")
+
+            # 진행률 업데이트
+            if 'progress_percent' in metrics:
+                progress = metrics['progress_percent']
+                if hasattr(self, 'progress_label'):
+                    self.progress_label.config(text=f"{progress:.1f}%")
+                if hasattr(self, 'progress_bar'):
+                    self.progress_bar['value'] = progress
+
+            # 메트릭 데이터에 추가 (차트용)
+            if all(k in metrics for k in ['precision', 'recall', 'map50', 'map95', 'total_loss']):
+                if 'epoch' in metrics:
+                    self.metrics_data['epochs'].append(metrics['epoch'])
+                    self.metrics_data['precision'].append(metrics['precision'])
+                    self.metrics_data['recall'].append(metrics['recall'])
+                    self.metrics_data['map50'].append(metrics['map50'])
+                    self.metrics_data['map95'].append(metrics['map95'])
+                    self.metrics_data['loss'].append(metrics['total_loss'])
+
+                    # learning rate도 있으면 추가
+                    if 'lr' in metrics:
+                        self.metrics_data['lr'].append(metrics['lr'])
+
+                    # Best models 업데이트
+                    self._update_best_models(metrics)
+
+                    # 차트 업데이트
+                    if MATPLOTLIB_AVAILABLE and len(self.metrics_data['epochs']) >= 2:
+                        self.update_charts()
+
+        except Exception as e:
+            print(f"⚠️ 메트릭 업데이트 오류: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _update_best_models(self, metrics):
+        """Best 모델 추적 업데이트"""
+        epoch = metrics.get('epoch', 0)
+        precision = metrics.get('precision', 0)
+        recall = metrics.get('recall', 0)
+        map50 = metrics.get('map50', 0)
+        map95 = metrics.get('map95', 0)
+
+        # Best Precision
+        if precision > self.best_models['precision']['score']:
+            self.best_models['precision'].update({
+                'score': precision,
+                'epoch': epoch,
+                'precision': precision,
+                'recall': recall,
+                'map50': map50,
+                'map95': map95,
+                'file_size': 'N/A'
+            })
+
+        # Best Recall
+        if recall > self.best_models['recall']['score']:
+            self.best_models['recall'].update({
+                'score': recall,
+                'epoch': epoch,
+                'precision': precision,
+                'recall': recall,
+                'map50': map50,
+                'map95': map95,
+                'file_size': 'N/A'
+            })
+
+        # Best Balance (F1 score)
+        f1_score = 2 * (precision * recall) / (precision + recall + 1e-6)
+        if f1_score > self.best_models['balance']['score']:
+            self.best_models['balance'].update({
+                'score': f1_score,
+                'epoch': epoch,
+                'precision': precision,
+                'recall': recall,
+                'map50': map50,
+                'map95': map95,
+                'file_size': 'N/A'
+            })
+
+        # Best mAP
+        if map95 > self.best_models['map']['score']:
+            self.best_models['map'].update({
+                'score': map95,
+                'epoch': epoch,
+                'precision': precision,
+                'recall': recall,
+                'map50': map50,
+                'map95': map95,
+                'file_size': 'N/A'
+            })
+
+        # Best epoch 표시 업데이트
+        if hasattr(self, 'best_epoch_label'):
+            best_map_epoch = self.best_models['map']['epoch']
+            if best_map_epoch > 0:
+                self.best_epoch_label.config(text=f"Epoch {best_map_epoch} (mAP: {self.best_models['map']['score']:.3f})")
+
     def on_log_update(self, data):
         """로그 업데이트 콜백"""
-        pass
-    
+        self.root.after(0, lambda: self._on_log_update_ui(data))
+
+    def _on_log_update_ui(self, data):
+        """로그 업데이트 UI (메인 스레드)"""
+        if 'line' in data:
+            line = data['line']
+            self.add_log_entry(line)
+
     def on_training_complete(self, data):
         """훈련 완료 콜백"""
-        pass
-    
+        self.root.after(0, lambda: self._on_training_complete_ui(data))
+
+    def _on_training_complete_ui(self, data):
+        """훈련 완료 UI (메인 스레드)"""
+        self.is_training = False
+        success = data.get('success', False)
+
+        self.add_log_entry("=" * 50)
+        if success:
+            self.add_log_entry("🎉 훈련이 성공적으로 완료되었습니다!")
+            self.add_log_entry(f"✅ 완료된 Epoch: {self.current_epoch}/{self.total_epochs}")
+            self.status_text_var.set("✅ 훈련 완료")
+        else:
+            self.add_log_entry("⚠️ 훈련이 오류와 함께 종료되었습니다.")
+            return_code = data.get('return_code', -1)
+            self.add_log_entry(f"❌ 종료 코드: {return_code}")
+            self.status_text_var.set("❌ 훈련 실패")
+
+        # Best 모델 정보 표시
+        self.add_log_entry("")
+        self.add_log_entry("🏆 Best Models:")
+        for model_type, model_data in self.best_models.items():
+            if model_data['epoch'] > 0:
+                self.add_log_entry(f"  • {model_type.capitalize()}: Epoch {model_data['epoch']} (score: {model_data['score']:.3f})")
+
+        self.add_log_entry("=" * 50)
+
+        # 모델 테이블 업데이트
+        self.update_models_table()
+
+        # 종료 시간 계산
+        if self.start_time:
+            elapsed = time.time() - self.start_time
+            hours = int(elapsed // 3600)
+            minutes = int((elapsed % 3600) // 60)
+            seconds = int(elapsed % 60)
+            self.add_log_entry(f"⏱️ 총 훈련 시간: {hours}시간 {minutes}분 {seconds}초")
+
     def on_training_stopped(self, data):
         """훈련 정지 콜백"""
-        pass
-    
+        self.root.after(0, lambda: self._on_training_stopped_ui(data))
+
+    def _on_training_stopped_ui(self, data):
+        """훈련 정지 UI (메인 스레드)"""
+        self.is_training = False
+
+        self.add_log_entry("=" * 50)
+        self.add_log_entry("⏸️ 훈련이 중간에 종료되었습니다.")
+        self.add_log_entry(f"🔢 종료 시점: Epoch {self.current_epoch}/{self.total_epochs}")
+
+        # Best 모델 정보 표시
+        self.add_log_entry("")
+        self.add_log_entry("🏆 현재까지의 Best Models:")
+        for model_type, model_data in self.best_models.items():
+            if model_data['epoch'] > 0:
+                self.add_log_entry(f"  • {model_type.capitalize()}: Epoch {model_data['epoch']} (score: {model_data['score']:.3f})")
+
+        self.add_log_entry("=" * 50)
+
+        self.status_text_var.set("⏸️ 훈련 중지됨")
+
+        # 모델 테이블 업데이트
+        self.update_models_table()
+
     def on_error(self, data):
         """에러 콜백"""
-        pass
+        self.root.after(0, lambda: self._on_error_ui(data))
+
+    def _on_error_ui(self, data):
+        """에러 UI (메인 스레드)"""
+        message = data.get('message', '알 수 없는 오류')
+        self.add_log_entry(f"❌ 오류: {message}")
+        self.status_text_var.set("❌ 오류 발생")

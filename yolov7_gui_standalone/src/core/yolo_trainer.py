@@ -14,13 +14,16 @@ from datetime import datetime
 import yaml
 import re
 
+# 로그 파서 import
+from core.log_parser import YOLOv7LogParser
+
 class YOLOv7Trainer:
     """YOLOv7 훈련 프로세스 관리 클래스"""
-    
+
     def __init__(self):
         self.setup_paths()
         self.reset_state()
-        self.log_parser = LogParser()
+        self.log_parser = YOLOv7LogParser()
         self.callbacks = {}
         
     def setup_paths(self):
@@ -386,10 +389,22 @@ class YOLOv7Trainer:
                     line = line.strip()
                     if line:
                         # 로그 파싱
-                        metrics = self.log_parser.parse_line(line)
-                        if metrics:
-                            self.current_metrics.update(metrics)
-                            self.trigger_callback('metrics_update', self.current_metrics)
+                        parse_result = self.log_parser.parse_line(line)
+                        if parse_result:
+                            result_type = parse_result.get('type')
+                            result_data = parse_result.get('data', {})
+
+                            if result_type == 'metrics':
+                                # 전체 메트릭 업데이트
+                                self.current_metrics.update(result_data)
+                                self.trigger_callback('metrics_update', result_data)
+                            elif result_type == 'epoch':
+                                # Epoch 정보 업데이트
+                                self.current_metrics.update(result_data)
+                                self.trigger_callback('epoch_update', result_data)
+                            elif result_type == 'progress':
+                                # 진행률 업데이트
+                                self.trigger_callback('progress_update', result_data)
 
                         # 로그 큐에 추가 (큐가 가득 차면 오래된 항목 제거)
                         try:
@@ -537,55 +552,7 @@ class YOLOv7Trainer:
         return lines
 
 
-class LogParser:
-    """YOLOv7 로그 파싱 클래스"""
-    
-    def __init__(self):
-        self.patterns = {
-            'epoch': re.compile(r'Epoch\s+(\d+)/(\d+)'),
-            'metrics': re.compile(r'P:\s*([\d.]+)\s+R:\s*([\d.]+)\s+mAP@\.5:\s*([\d.]+)\s+mAP@\.5:.95:\s*([\d.]+)'),
-            'loss': re.compile(r'train.*?(\d+\.\d+)'),
-            'lr': re.compile(r'lr:\s*([\d.e-]+)'),
-            'gpu_memory': re.compile(r'(\d+\.?\d*)G'),
-            'time': re.compile(r'(\d+:\d+:\d+)'),
-        }
-    
-    def parse_line(self, line):
-        """로그 라인 파싱"""
-        metrics = {}
-        
-        # Epoch 정보
-        epoch_match = self.patterns['epoch'].search(line)
-        if epoch_match:
-            metrics['current_epoch'] = int(epoch_match.group(1))
-            metrics['total_epochs'] = int(epoch_match.group(2))
-        
-        # 성능 메트릭
-        metrics_match = self.patterns['metrics'].search(line)
-        if metrics_match:
-            metrics.update({
-                'precision': float(metrics_match.group(1)),
-                'recall': float(metrics_match.group(2)),
-                'map50': float(metrics_match.group(3)),
-                'map95': float(metrics_match.group(4))
-            })
-        
-        # Loss
-        loss_match = self.patterns['loss'].search(line)
-        if loss_match:
-            metrics['loss'] = float(loss_match.group(1))
-        
-        # Learning Rate
-        lr_match = self.patterns['lr'].search(line)
-        if lr_match:
-            metrics['learning_rate'] = float(lr_match.group(1))
-        
-        # GPU 메모리
-        gpu_match = self.patterns['gpu_memory'].search(line)
-        if gpu_match:
-            metrics['gpu_memory'] = f"{gpu_match.group(1)}G"
-        
-        return metrics if metrics else None
+# LogParser 클래스는 core/log_parser.py의 YOLOv7LogParser로 대체됨
 
 
 # src/core/config_manager.py - 설정 관리 모듈
