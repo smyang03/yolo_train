@@ -177,6 +177,9 @@ class YOLOv7Trainer:
         if self.is_training:
             raise RuntimeError("이미 훈련이 진행 중입니다.")
 
+        # ✨ 중요: 이전 훈련의 stop 이벤트 초기화 (Stop 후 재시작 시 필수)
+        self._stop_event.clear()
+
         self.training_config = config.copy()
         self.start_time = time.time()
 
