@@ -65,33 +65,64 @@ class YOLOv7App:
         """Professional GUI 실행"""
         try:
             print("🎨 Professional GUI 시작 중...")
-            
+
             # 메인 윈도우 생성
             root = tk.Tk()
             root.withdraw()  # 일시적으로 숨김
-            
+
+            # 종료 시 cleanup 호출 등록
+            root.protocol("WM_DELETE_WINDOW", lambda: self.on_closing(root))
+
             # Professional Main Window 로드
             from ui.main_window import MainWindow
-            
+
             self.main_window = MainWindow(
                 root=root,
                 trainer=self.trainer,
                 config_manager=self.config_manager,
                 model_manager=self.model_manager
             )
-            
+
             print("🚀 GUI 시작 중...")
             self.main_window.show()
             print("✅ GUI 시작 완료")
-            
+
             # 연결 테스트 자동 실행
             self.auto_test_connection()
-            
+
             # 메인 루프 시작
             root.mainloop()
-            
+
         except Exception as e:
             self.handle_error(e)
+        finally:
+            # 항상 cleanup 호출
+            self.cleanup()
+
+    def on_closing(self, root):
+        """창 닫기 시 안전한 종료"""
+        print("🛑 애플리케이션 종료 요청...")
+
+        # 훈련 중인지 확인
+        if self.trainer.is_training:
+            import tkinter.messagebox as msgbox
+            result = msgbox.askyesno(
+                "훈련 진행 중",
+                "훈련이 진행 중입니다. 정말로 종료하시겠습니까?"
+            )
+            if not result:
+                return
+
+            # 훈련 중지
+            print("훈련 중지 중...")
+            self.trainer.stop_training()
+
+        # 리소스 정리
+        self.cleanup()
+
+        # 창 닫기
+        root.quit()
+        root.destroy()
     
     def auto_test_connection(self):
         """자동 연결 테스트"""
@@ -127,5 +158,26 @@ class YOLOv7App:
             pass
     
     def cleanup(self):
-        """정리 작업"""
-        print("👋 애플리케이션 종료")
+        """정리 작업 - 모든 리소스 해제"""
+        print("🧹 애플리케이션 정리 중...")
+
+        try:
+            # Trainer 리소스 정리
+            if hasattr(self, 'trainer') and self.trainer:
+                self.trainer.cleanup()
+
+            # Config Manager 정리 (필요시)
+            if hasattr(self, 'config_manager') and self.config_manager:
+                pass  # 필요한 정리 작업
+
+            # Model Manager 정리 (필요시)
+            if hasattr(self, 'model_manager') and self.model_manager:
+                pass  # 필요한 정리 작업
+
+            print("✅ 정리 완료")
+
+        except Exception as e:
+            print(f"⚠️ 정리 중 오류: {e}")
+
+        finally:
+            print("👋 애플리케이션 종료")
