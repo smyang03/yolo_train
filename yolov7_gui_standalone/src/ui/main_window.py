@@ -7,6 +7,7 @@ import json
 import os
 from datetime import datetime, timedelta
 import numpy as np
+from utils.system_utils import get_available_devices
 
 try:
     import matplotlib.pyplot as plt
@@ -87,12 +88,16 @@ class MainWindow:
         self.hyperparams_path_var = tk.StringVar()
         self.hyp_paths_mapping = {}
         
+        # 🔥 GPU 자동 감지
+        available_devices, default_device = get_available_devices()
+        self.available_devices = available_devices
+
         # 훈련 파라미터
         self.epochs_var = tk.IntVar(value=300)
         self.batch_size_var = tk.IntVar(value=16)
         self.learning_rate_var = tk.DoubleVar(value=0.01)
         self.workers_var = tk.IntVar(value=8)
-        self.device_var = tk.StringVar(value="0")
+        self.device_var = tk.StringVar(value=default_device)
         
         # 훈련 옵션
         self.cache_images_var = tk.BooleanVar()
@@ -1033,11 +1038,11 @@ class MainWindow:
         self.workers_label = ttk.Label(params_grid, text="8", font=('Arial', 11, 'bold'))
         self.workers_label.grid(row=3, column=2, padx=(10, 0), pady=5)
         
-        # Device
+        # Device (자동 감지된 GPU 목록 사용)
         ttk.Label(params_grid, text="Device:", font=('Arial', 11, 'bold')).grid(
             row=4, column=0, sticky='w', padx=(0, 20), pady=5)
-        device_combo = ttk.Combobox(params_grid, textvariable=self.device_var, 
-                                   values=["0", "1", "2", "3", "cpu"], width=15)
+        device_combo = ttk.Combobox(params_grid, textvariable=self.device_var,
+                                   values=self.available_devices, width=15)
         device_combo.grid(row=4, column=1, sticky='w', pady=5)
         
         params_grid.grid_columnconfigure(1, weight=1)
