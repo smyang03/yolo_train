@@ -174,7 +174,31 @@ class MainWindow:
             "YOLOv7-D6": "yolov7-d6.pt",
             "YOLOv7-E6E": "yolov7-e6e.pt"
     }
-        
+
+        # 📊 평가(Evaluation) 탭 변수
+        self.eval_data_var = tk.StringVar()  # Dataset YAML 경로
+        self.eval_model1_var = tk.StringVar()  # 모델 1 경로
+        self.eval_model2_var = tk.StringVar()  # 모델 2 경로
+        self.eval_batch_size_var = tk.IntVar(value=32)
+        self.eval_img_size_var = tk.IntVar(value=640)
+        self.eval_conf_thres_var = tk.DoubleVar(value=0.001)
+        self.eval_iou_thres_var = tk.DoubleVar(value=0.6)
+        self.eval_device_var = tk.StringVar(value=default_device)
+        self.eval_results = {}  # 평가 결과 저장
+        self.is_evaluating = False
+
+        # 🎥 동영상 추론(Video Inference) 탭 변수
+        self.video_source_var = tk.StringVar()  # 입력 동영상 경로
+        self.video_model1_var = tk.StringVar()  # 모델 1 경로
+        self.video_model2_var = tk.StringVar()  # 모델 2 경로
+        self.video_img_size_var = tk.IntVar(value=640)
+        self.video_conf_thres_var = tk.DoubleVar(value=0.25)
+        self.video_iou_thres_var = tk.DoubleVar(value=0.45)
+        self.video_device_var = tk.StringVar(value=default_device)
+        self.video_output1_var = tk.StringVar()  # 결과 영상 1 경로
+        self.video_output2_var = tk.StringVar()  # 결과 영상 2 경로
+        self.is_inferencing = False
+
     def create_ui(self):
         """Enhanced UI 생성"""
         self.root.title("🚀 YOLOv7 Enhanced Professional Training GUI")
@@ -188,12 +212,14 @@ class MainWindow:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill='both', expand=True, padx=10, pady=5)
         
-        # 4개 탭 생성
+        # 6개 탭 생성
         self.create_enhanced_settings_tab()
         self.create_enhanced_progress_tab()
         self.create_enhanced_results_tab()
         self.create_models_tab()
-        
+        self.create_evaluation_tab()  # 📊 평가 탭
+        self.create_video_inference_tab()  # 🎥 동영상 추론 탭
+
         # 제어 버튼
         self.create_control_buttons()
         
@@ -1542,9 +1568,281 @@ class MainWindow:
                   command=self.export_model_list).pack(side='left', padx=(0, 5))
         ttk.Button(table_actions_frame, text="🗑️ Cleanup Old Models", 
                   command=self.cleanup_models).pack(side='left', padx=5)
-        ttk.Button(table_actions_frame, text="🔄 Refresh List", 
+        ttk.Button(table_actions_frame, text="🔄 Refresh List",
                   command=self.refresh_model_list).pack(side='left', padx=5)
-    
+
+    def create_evaluation_tab(self):
+        """📊 평가(Evaluation) 탭 - 모델 성능 평가 및 비교"""
+        eval_frame = ttk.Frame(self.notebook)
+        self.notebook.add(eval_frame, text="📊 평가")
+
+        # 스크롤 가능한 프레임
+        canvas = tk.Canvas(eval_frame)
+        scrollbar = ttk.Scrollbar(eval_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Dataset 설정
+        dataset_frame = ttk.LabelFrame(scrollable_frame, text="📁 Dataset Configuration", padding=15)
+        dataset_frame.pack(fill='x', pady=10, padx=15)
+
+        ttk.Label(dataset_frame, text="Dataset YAML (data.yaml):", font=('Arial', 11, 'bold')).pack(anchor='w')
+        dataset_path_frame = ttk.Frame(dataset_frame)
+        dataset_path_frame.pack(fill='x', pady=5)
+
+        ttk.Entry(dataset_path_frame, textvariable=self.eval_data_var, font=('Arial', 10), width=70).pack(side='left', fill='x', expand=True)
+        ttk.Button(dataset_path_frame, text="Browse", command=self.browse_eval_dataset).pack(side='right', padx=(5, 0))
+
+        ttk.Label(dataset_frame, text="💡 데이터셋 YAML 파일에 test 또는 val 경로가 포함되어야 합니다.",
+                 font=('Arial', 9), foreground='gray').pack(anchor='w', pady=(5, 0))
+
+        # 모델 선택
+        models_frame = ttk.LabelFrame(scrollable_frame, text="🤖 Model Selection", padding=15)
+        models_frame.pack(fill='x', pady=10, padx=15)
+
+        # 모델 1
+        ttk.Label(models_frame, text="Model 1 (.pt):", font=('Arial', 11, 'bold')).pack(anchor='w')
+        model1_frame = ttk.Frame(models_frame)
+        model1_frame.pack(fill='x', pady=5)
+
+        ttk.Entry(model1_frame, textvariable=self.eval_model1_var, font=('Arial', 10), width=70).pack(side='left', fill='x', expand=True)
+        ttk.Button(model1_frame, text="Browse", command=self.browse_eval_model1).pack(side='right', padx=(5, 0))
+
+        # 모델 2 (선택 사항)
+        ttk.Label(models_frame, text="Model 2 (.pt) - 선택 사항 (비교용):", font=('Arial', 11, 'bold')).pack(anchor='w', pady=(10, 0))
+        model2_frame = ttk.Frame(models_frame)
+        model2_frame.pack(fill='x', pady=5)
+
+        ttk.Entry(model2_frame, textvariable=self.eval_model2_var, font=('Arial', 10), width=70).pack(side='left', fill='x', expand=True)
+        ttk.Button(model2_frame, text="Browse", command=self.browse_eval_model2).pack(side='right', padx=(5, 0))
+
+        # 평가 옵션
+        options_frame = ttk.LabelFrame(scrollable_frame, text="⚙️ Evaluation Options", padding=15)
+        options_frame.pack(fill='x', pady=10, padx=15)
+
+        options_grid = ttk.Frame(options_frame)
+        options_grid.pack(fill='x')
+
+        # Batch Size
+        ttk.Label(options_grid, text="Batch Size:").grid(row=0, column=0, sticky='w', padx=5, pady=5)
+        ttk.Spinbox(options_grid, from_=1, to=128, textvariable=self.eval_batch_size_var, width=15).grid(row=0, column=1, sticky='w', padx=5, pady=5)
+
+        # Image Size
+        ttk.Label(options_grid, text="Image Size:").grid(row=0, column=2, sticky='w', padx=5, pady=5)
+        ttk.Combobox(options_grid, textvariable=self.eval_img_size_var, values=[320, 416, 512, 640, 768, 896, 1024, 1280], width=12).grid(row=0, column=3, sticky='w', padx=5, pady=5)
+
+        # Conf Threshold
+        ttk.Label(options_grid, text="Confidence Threshold:").grid(row=1, column=0, sticky='w', padx=5, pady=5)
+        ttk.Spinbox(options_grid, from_=0.001, to=1.0, increment=0.01, textvariable=self.eval_conf_thres_var, width=15, format="%.3f").grid(row=1, column=1, sticky='w', padx=5, pady=5)
+
+        # IOU Threshold
+        ttk.Label(options_grid, text="IOU Threshold:").grid(row=1, column=2, sticky='w', padx=5, pady=5)
+        ttk.Spinbox(options_grid, from_=0.1, to=1.0, increment=0.05, textvariable=self.eval_iou_thres_var, width=12, format="%.2f").grid(row=1, column=3, sticky='w', padx=5, pady=5)
+
+        # Device
+        ttk.Label(options_grid, text="Device:").grid(row=2, column=0, sticky='w', padx=5, pady=5)
+        ttk.Combobox(options_grid, textvariable=self.eval_device_var, values=self.available_devices, width=12).grid(row=2, column=1, sticky='w', padx=5, pady=5)
+
+        # 실행 버튼
+        start_button_frame = ttk.Frame(scrollable_frame)
+        start_button_frame.pack(fill='x', pady=15, padx=15)
+
+        self.eval_start_btn = ttk.Button(start_button_frame, text="🚀 Start Evaluation",
+                                        command=self.run_evaluation, style='success.TButton')
+        self.eval_start_btn.pack(fill='x', ipady=10)
+
+        # 진행 상태
+        progress_frame = ttk.LabelFrame(scrollable_frame, text="📊 Evaluation Progress", padding=15)
+        progress_frame.pack(fill='x', pady=10, padx=15)
+
+        self.eval_status_var = tk.StringVar(value="평가 대기 중...")
+        ttk.Label(progress_frame, textvariable=self.eval_status_var, font=('Arial', 11)).pack(anchor='w')
+
+        self.eval_progress = ttk.Progressbar(progress_frame, mode='indeterminate')
+        self.eval_progress.pack(fill='x', pady=5)
+
+        # 평가 로그
+        log_frame = ttk.Frame(progress_frame)
+        log_frame.pack(fill='both', expand=True, pady=5)
+
+        eval_log_scrollbar = ttk.Scrollbar(log_frame)
+        eval_log_scrollbar.pack(side='right', fill='y')
+
+        self.eval_log_text = tk.Text(log_frame, height=8, wrap='word', yscrollcommand=eval_log_scrollbar.set,
+                                     font=('Courier', 9))
+        self.eval_log_text.pack(side='left', fill='both', expand=True)
+        eval_log_scrollbar.config(command=self.eval_log_text.yview)
+
+        # 결과 비교
+        results_frame = ttk.LabelFrame(scrollable_frame, text="📈 Results Comparison", padding=15)
+        results_frame.pack(fill='both', expand=True, pady=10, padx=15)
+
+        # 결과 테이블
+        columns = ("Metric", "Model 1", "Model 2", "Difference")
+        self.eval_results_tree = ttk.Treeview(results_frame, columns=columns, show='headings', height=8)
+
+        for col in columns:
+            self.eval_results_tree.heading(col, text=col)
+            self.eval_results_tree.column(col, width=150, anchor='center')
+
+        eval_tree_scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=self.eval_results_tree.yview)
+        self.eval_results_tree.configure(yscrollcommand=eval_tree_scrollbar.set)
+
+        self.eval_results_tree.pack(side="left", fill="both", expand=True)
+        eval_tree_scrollbar.pack(side="right", fill="y")
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def create_video_inference_tab(self):
+        """🎥 동영상 추론(Video Inference) 탭 - 동영상에서 객체 탐지 및 비교"""
+        video_frame = ttk.Frame(self.notebook)
+        self.notebook.add(video_frame, text="🎥 동영상 추론")
+
+        # 스크롤 가능한 프레임
+        canvas = tk.Canvas(video_frame)
+        scrollbar = ttk.Scrollbar(video_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # 동영상 입력
+        input_frame = ttk.LabelFrame(scrollable_frame, text="🎬 Video Input", padding=15)
+        input_frame.pack(fill='x', pady=10, padx=15)
+
+        ttk.Label(input_frame, text="Input Video (.mp4, .avi, etc.):", font=('Arial', 11, 'bold')).pack(anchor='w')
+        video_path_frame = ttk.Frame(input_frame)
+        video_path_frame.pack(fill='x', pady=5)
+
+        ttk.Entry(video_path_frame, textvariable=self.video_source_var, font=('Arial', 10), width=70).pack(side='left', fill='x', expand=True)
+        ttk.Button(video_path_frame, text="Browse", command=self.browse_video_source).pack(side='right', padx=(5, 0))
+
+        # 모델 선택
+        models_frame = ttk.LabelFrame(scrollable_frame, text="🤖 Model Selection", padding=15)
+        models_frame.pack(fill='x', pady=10, padx=15)
+
+        # 모델 1
+        ttk.Label(models_frame, text="Model 1 (.pt):", font=('Arial', 11, 'bold')).pack(anchor='w')
+        model1_frame = ttk.Frame(models_frame)
+        model1_frame.pack(fill='x', pady=5)
+
+        ttk.Entry(model1_frame, textvariable=self.video_model1_var, font=('Arial', 10), width=70).pack(side='left', fill='x', expand=True)
+        ttk.Button(model1_frame, text="Browse", command=self.browse_video_model1).pack(side='right', padx=(5, 0))
+
+        # 모델 2 (선택 사항)
+        ttk.Label(models_frame, text="Model 2 (.pt) - 선택 사항 (비교용):", font=('Arial', 11, 'bold')).pack(anchor='w', pady=(10, 0))
+        model2_frame = ttk.Frame(models_frame)
+        model2_frame.pack(fill='x', pady=5)
+
+        ttk.Entry(model2_frame, textvariable=self.video_model2_var, font=('Arial', 10), width=70).pack(side='left', fill='x', expand=True)
+        ttk.Button(model2_frame, text="Browse", command=self.browse_video_model2).pack(side='right', padx=(5, 0))
+
+        # 추론 옵션
+        options_frame = ttk.LabelFrame(scrollable_frame, text="⚙️ Inference Options", padding=15)
+        options_frame.pack(fill='x', pady=10, padx=15)
+
+        options_grid = ttk.Frame(options_frame)
+        options_grid.pack(fill='x')
+
+        # Image Size
+        ttk.Label(options_grid, text="Image Size:").grid(row=0, column=0, sticky='w', padx=5, pady=5)
+        ttk.Combobox(options_grid, textvariable=self.video_img_size_var, values=[320, 416, 512, 640, 768, 896, 1024, 1280], width=12).grid(row=0, column=1, sticky='w', padx=5, pady=5)
+
+        # Conf Threshold
+        ttk.Label(options_grid, text="Confidence Threshold:").grid(row=0, column=2, sticky='w', padx=5, pady=5)
+        ttk.Spinbox(options_grid, from_=0.01, to=1.0, increment=0.05, textvariable=self.video_conf_thres_var, width=15, format="%.2f").grid(row=0, column=3, sticky='w', padx=5, pady=5)
+
+        # IOU Threshold
+        ttk.Label(options_grid, text="IOU Threshold:").grid(row=1, column=0, sticky='w', padx=5, pady=5)
+        ttk.Spinbox(options_grid, from_=0.1, to=1.0, increment=0.05, textvariable=self.video_iou_thres_var, width=12, format="%.2f").grid(row=1, column=1, sticky='w', padx=5, pady=5)
+
+        # Device
+        ttk.Label(options_grid, text="Device:").grid(row=1, column=2, sticky='w', padx=5, pady=5)
+        ttk.Combobox(options_grid, textvariable=self.video_device_var, values=self.available_devices, width=12).grid(row=1, column=3, sticky='w', padx=5, pady=5)
+
+        # 실행 버튼
+        start_button_frame = ttk.Frame(scrollable_frame)
+        start_button_frame.pack(fill='x', pady=15, padx=15)
+
+        self.video_start_btn = ttk.Button(start_button_frame, text="🚀 Start Inference",
+                                         command=self.run_video_inference, style='success.TButton')
+        self.video_start_btn.pack(fill='x', ipady=10)
+
+        # 진행 상태
+        progress_frame = ttk.LabelFrame(scrollable_frame, text="📊 Inference Progress", padding=15)
+        progress_frame.pack(fill='x', pady=10, padx=15)
+
+        self.video_status_var = tk.StringVar(value="추론 대기 중...")
+        ttk.Label(progress_frame, textvariable=self.video_status_var, font=('Arial', 11)).pack(anchor='w')
+
+        self.video_progress = ttk.Progressbar(progress_frame, mode='indeterminate')
+        self.video_progress.pack(fill='x', pady=5)
+
+        # 추론 로그
+        log_frame = ttk.Frame(progress_frame)
+        log_frame.pack(fill='both', expand=True, pady=5)
+
+        video_log_scrollbar = ttk.Scrollbar(log_frame)
+        video_log_scrollbar.pack(side='right', fill='y')
+
+        self.video_log_text = tk.Text(log_frame, height=8, wrap='word', yscrollcommand=video_log_scrollbar.set,
+                                      font=('Courier', 9))
+        self.video_log_text.pack(side='left', fill='both', expand=True)
+        video_log_scrollbar.config(command=self.video_log_text.yview)
+
+        # 결과 영상
+        results_frame = ttk.LabelFrame(scrollable_frame, text="🎬 Output Videos", padding=15)
+        results_frame.pack(fill='both', expand=True, pady=10, padx=15)
+
+        # 모델 1 결과
+        result1_frame = ttk.LabelFrame(results_frame, text="Model 1 Result", padding=10)
+        result1_frame.pack(fill='x', pady=5)
+
+        self.video_result1_label = ttk.Label(result1_frame, text="No output yet", font=('Arial', 10))
+        self.video_result1_label.pack(anchor='w', pady=5)
+
+        result1_buttons = ttk.Frame(result1_frame)
+        result1_buttons.pack(fill='x')
+
+        ttk.Button(result1_buttons, text="📂 Open Folder", command=lambda: self.open_result_folder(1)).pack(side='left', padx=(0, 5))
+        ttk.Button(result1_buttons, text="▶️ Play Video", command=lambda: self.play_result_video(1)).pack(side='left', padx=5)
+
+        # 모델 2 결과
+        result2_frame = ttk.LabelFrame(results_frame, text="Model 2 Result", padding=10)
+        result2_frame.pack(fill='x', pady=5)
+
+        self.video_result2_label = ttk.Label(result2_frame, text="No output yet", font=('Arial', 10))
+        self.video_result2_label.pack(anchor='w', pady=5)
+
+        result2_buttons = ttk.Frame(result2_frame)
+        result2_buttons.pack(fill='x')
+
+        ttk.Button(result2_buttons, text="📂 Open Folder", command=lambda: self.open_result_folder(2)).pack(side='left', padx=(0, 5))
+        ttk.Button(result2_buttons, text="▶️ Play Video", command=lambda: self.play_result_video(2)).pack(side='left', padx=5)
+
+        # 비교 재생 버튼
+        compare_frame = ttk.Frame(results_frame)
+        compare_frame.pack(fill='x', pady=10)
+
+        ttk.Button(compare_frame, text="🔀 Compare Videos Side-by-Side",
+                  command=self.compare_videos, style='info.TButton').pack(fill='x', ipady=8)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
     def create_charts(self, parent):
         """성능 차트 생성"""
         if not MATPLOTLIB_AVAILABLE:
@@ -3118,3 +3416,475 @@ class MainWindow:
         message = data.get('message', '알 수 없는 오류')
         self.add_log_entry(f"❌ 오류: {message}")
         self.status_text_var.set("❌ 오류 발생")
+
+    # ==================== 평가(Evaluation) 관련 메서드 ====================
+
+    def browse_eval_dataset(self):
+        """평가용 데이터셋 YAML 파일 선택"""
+        filename = filedialog.askopenfilename(
+            title="Select Dataset YAML",
+            filetypes=[("YAML files", "*.yaml"), ("All files", "*.*")]
+        )
+        if filename:
+            self.eval_data_var.set(filename)
+            self.add_eval_log(f"데이터셋 선택: {filename}")
+
+    def browse_eval_model1(self):
+        """평가용 모델 1 선택"""
+        filename = filedialog.askopenfilename(
+            title="Select Model 1 (.pt)",
+            filetypes=[("PyTorch Model", "*.pt"), ("All files", "*.*")]
+        )
+        if filename:
+            self.eval_model1_var.set(filename)
+            self.add_eval_log(f"모델 1 선택: {filename}")
+
+    def browse_eval_model2(self):
+        """평가용 모델 2 선택"""
+        filename = filedialog.askopenfilename(
+            title="Select Model 2 (.pt)",
+            filetypes=[("PyTorch Model", "*.pt"), ("All files", "*.*")]
+        )
+        if filename:
+            self.eval_model2_var.set(filename)
+            self.add_eval_log(f"모델 2 선택: {filename}")
+
+    def add_eval_log(self, message):
+        """평가 로그 추가"""
+        if hasattr(self, 'eval_log_text'):
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            log_message = f"[{timestamp}] {message}\n"
+            self.eval_log_text.insert(tk.END, log_message)
+            self.eval_log_text.see(tk.END)
+
+    def run_evaluation(self):
+        """평가 실행"""
+        if self.is_evaluating:
+            messagebox.showwarning("경고", "이미 평가가 진행 중입니다.")
+            return
+
+        # 입력 검증
+        data_path = self.eval_data_var.get()
+        model1_path = self.eval_model1_var.get()
+
+        if not data_path:
+            messagebox.showerror("오류", "데이터셋 YAML 파일을 선택해주세요.")
+            return
+
+        if not model1_path:
+            messagebox.showerror("오류", "모델 1을 선택해주세요.")
+            return
+
+        if not Path(data_path).exists():
+            messagebox.showerror("오류", f"데이터셋 파일을 찾을 수 없습니다:\n{data_path}")
+            return
+
+        if not Path(model1_path).exists():
+            messagebox.showerror("오류", f"모델 1 파일을 찾을 수 없습니다:\n{model1_path}")
+            return
+
+        model2_path = self.eval_model2_var.get()
+        if model2_path and not Path(model2_path).exists():
+            messagebox.showerror("오류", f"모델 2 파일을 찾을 수 없습니다:\n{model2_path}")
+            return
+
+        self.is_evaluating = True
+        self.eval_start_btn.config(state='disabled')
+        self.eval_progress.start()
+        self.eval_status_var.set("평가 진행 중...")
+        self.eval_log_text.delete('1.0', tk.END)
+        self.add_eval_log("=" * 60)
+        self.add_eval_log("평가 시작")
+        self.add_eval_log("=" * 60)
+
+        # 별도 스레드에서 평가 실행
+        threading.Thread(target=self._run_evaluation_thread, daemon=True).start()
+
+    def _run_evaluation_thread(self):
+        """평가 스레드 (백그라운드)"""
+        try:
+            model1_path = self.eval_model1_var.get()
+            model2_path = self.eval_model2_var.get()
+            data_path = self.eval_data_var.get()
+
+            # 모델 1 평가
+            self.root.after(0, lambda: self.add_eval_log("\n🔍 모델 1 평가 중..."))
+            result1 = self._evaluate_model(model1_path, data_path, "Model 1")
+
+            result2 = None
+            if model2_path:
+                # 모델 2 평가
+                self.root.after(0, lambda: self.add_eval_log("\n🔍 모델 2 평가 중..."))
+                result2 = self._evaluate_model(model2_path, data_path, "Model 2")
+
+            # 결과 저장 및 UI 업데이트
+            self.eval_results = {'model1': result1, 'model2': result2}
+            self.root.after(0, lambda: self._update_eval_results(result1, result2))
+
+        except Exception as e:
+            self.root.after(0, lambda: self.add_eval_log(f"\n❌ 평가 오류: {str(e)}"))
+            self.root.after(0, lambda: messagebox.showerror("평가 오류", f"평가 중 오류가 발생했습니다:\n{str(e)}"))
+
+        finally:
+            self.root.after(0, self._evaluation_complete)
+
+    def _evaluate_model(self, model_path, data_path, model_name):
+        """단일 모델 평가"""
+        import subprocess
+        import re
+
+        # test.py 경로
+        test_script = Path("yolov7/test.py")
+        if not test_script.exists():
+            raise FileNotFoundError(f"test.py를 찾을 수 없습니다: {test_script}")
+
+        # 평가 명령어 구성
+        cmd = [
+            "python", str(test_script),
+            "--data", data_path,
+            "--weights", model_path,
+            "--batch-size", str(self.eval_batch_size_var.get()),
+            "--img-size", str(self.eval_img_size_var.get()),
+            "--conf-thres", str(self.eval_conf_thres_var.get()),
+            "--iou-thres", str(self.eval_iou_thres_var.get()),
+            "--device", self.eval_device_var.get(),
+            "--task", "val",
+            "--verbose"
+        ]
+
+        self.root.after(0, lambda: self.add_eval_log(f"실행 명령어: {' '.join(cmd)}"))
+
+        # 프로세스 실행
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+
+        # 결과 파싱을 위한 변수
+        precision = recall = map50 = map95 = 0.0
+        output_lines = []
+
+        # 실시간 출력 읽기
+        for line in process.stdout:
+            line = line.strip()
+            output_lines.append(line)
+            if line:
+                self.root.after(0, lambda l=line: self.add_eval_log(l))
+
+            # 결과 파싱
+            # "all" 줄에서 메트릭 추출: "all    <images>    <labels>    P    R    mAP@.5    mAP@.5:.95"
+            if line.startswith("all"):
+                parts = line.split()
+                if len(parts) >= 7:
+                    try:
+                        precision = float(parts[3])
+                        recall = float(parts[4])
+                        map50 = float(parts[5])
+                        map95 = float(parts[6])
+                    except (ValueError, IndexError):
+                        pass
+
+        process.wait()
+
+        if process.returncode != 0:
+            raise RuntimeError(f"{model_name} 평가 실패 (return code: {process.returncode})")
+
+        result = {
+            'model_name': model_name,
+            'precision': precision,
+            'recall': recall,
+            'map50': map50,
+            'map95': map95,
+            'f1': 2 * precision * recall / (precision + recall + 1e-6)
+        }
+
+        self.root.after(0, lambda: self.add_eval_log(f"\n✅ {model_name} 평가 완료:"))
+        self.root.after(0, lambda: self.add_eval_log(f"   Precision: {precision:.4f}"))
+        self.root.after(0, lambda: self.add_eval_log(f"   Recall: {recall:.4f}"))
+        self.root.after(0, lambda: self.add_eval_log(f"   mAP@0.5: {map50:.4f}"))
+        self.root.after(0, lambda: self.add_eval_log(f"   mAP@0.5:0.95: {map95:.4f}"))
+
+        return result
+
+    def _update_eval_results(self, result1, result2):
+        """평가 결과 테이블 업데이트"""
+        # 테이블 초기화
+        for item in self.eval_results_tree.get_children():
+            self.eval_results_tree.delete(item)
+
+        metrics = [
+            ("Precision", "precision"),
+            ("Recall", "recall"),
+            ("F1 Score", "f1"),
+            ("mAP@0.5", "map50"),
+            ("mAP@0.5:0.95", "map95")
+        ]
+
+        for metric_name, metric_key in metrics:
+            val1 = result1.get(metric_key, 0.0)
+            val2 = result2.get(metric_key, 0.0) if result2 else 0.0
+            diff = val1 - val2 if result2 else 0.0
+
+            val1_str = f"{val1:.4f}"
+            val2_str = f"{val2:.4f}" if result2 else "-"
+            diff_str = f"{diff:+.4f}" if result2 else "-"
+
+            self.eval_results_tree.insert('', 'end', values=(metric_name, val1_str, val2_str, diff_str))
+
+        self.add_eval_log("\n📊 결과 비교 테이블이 업데이트되었습니다.")
+
+    def _evaluation_complete(self):
+        """평가 완료 처리"""
+        self.is_evaluating = False
+        self.eval_start_btn.config(state='normal')
+        self.eval_progress.stop()
+        self.eval_status_var.set("평가 완료")
+        self.add_eval_log("\n" + "=" * 60)
+        self.add_eval_log("✅ 모든 평가가 완료되었습니다.")
+        self.add_eval_log("=" * 60)
+
+    # ==================== 동영상 추론(Video Inference) 관련 메서드 ====================
+
+    def browse_video_source(self):
+        """추론할 동영상 파일 선택"""
+        filename = filedialog.askopenfilename(
+            title="Select Video File",
+            filetypes=[("Video files", "*.mp4 *.avi *.mov *.mkv"), ("All files", "*.*")]
+        )
+        if filename:
+            self.video_source_var.set(filename)
+            self.add_video_log(f"동영상 선택: {filename}")
+
+    def browse_video_model1(self):
+        """동영상 추론용 모델 1 선택"""
+        filename = filedialog.askopenfilename(
+            title="Select Model 1 (.pt)",
+            filetypes=[("PyTorch Model", "*.pt"), ("All files", "*.*")]
+        )
+        if filename:
+            self.video_model1_var.set(filename)
+            self.add_video_log(f"모델 1 선택: {filename}")
+
+    def browse_video_model2(self):
+        """동영상 추론용 모델 2 선택"""
+        filename = filedialog.askopenfilename(
+            title="Select Model 2 (.pt)",
+            filetypes=[("PyTorch Model", "*.pt"), ("All files", "*.*")]
+        )
+        if filename:
+            self.video_model2_var.set(filename)
+            self.add_video_log(f"모델 2 선택: {filename}")
+
+    def add_video_log(self, message):
+        """동영상 추론 로그 추가"""
+        if hasattr(self, 'video_log_text'):
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            log_message = f"[{timestamp}] {message}\n"
+            self.video_log_text.insert(tk.END, log_message)
+            self.video_log_text.see(tk.END)
+
+    def run_video_inference(self):
+        """동영상 추론 실행"""
+        if self.is_inferencing:
+            messagebox.showwarning("경고", "이미 추론이 진행 중입니다.")
+            return
+
+        # 입력 검증
+        video_path = self.video_source_var.get()
+        model1_path = self.video_model1_var.get()
+
+        if not video_path:
+            messagebox.showerror("오류", "동영상 파일을 선택해주세요.")
+            return
+
+        if not model1_path:
+            messagebox.showerror("오류", "모델 1을 선택해주세요.")
+            return
+
+        if not Path(video_path).exists():
+            messagebox.showerror("오류", f"동영상 파일을 찾을 수 없습니다:\n{video_path}")
+            return
+
+        if not Path(model1_path).exists():
+            messagebox.showerror("오류", f"모델 1 파일을 찾을 수 없습니다:\n{model1_path}")
+            return
+
+        model2_path = self.video_model2_var.get()
+        if model2_path and not Path(model2_path).exists():
+            messagebox.showerror("오류", f"모델 2 파일을 찾을 수 없습니다:\n{model2_path}")
+            return
+
+        self.is_inferencing = True
+        self.video_start_btn.config(state='disabled')
+        self.video_progress.start()
+        self.video_status_var.set("추론 진행 중...")
+        self.video_log_text.delete('1.0', tk.END)
+        self.add_video_log("=" * 60)
+        self.add_video_log("동영상 추론 시작")
+        self.add_video_log("=" * 60)
+
+        # 별도 스레드에서 추론 실행
+        threading.Thread(target=self._run_video_inference_thread, daemon=True).start()
+
+    def _run_video_inference_thread(self):
+        """동영상 추론 스레드 (백그라운드)"""
+        try:
+            video_path = self.video_source_var.get()
+            model1_path = self.video_model1_var.get()
+            model2_path = self.video_model2_var.get()
+
+            # 모델 1 추론
+            self.root.after(0, lambda: self.add_video_log("\n🎬 모델 1 추론 중..."))
+            output1 = self._infer_video(model1_path, video_path, "model1")
+            self.root.after(0, lambda: self.video_output1_var.set(output1))
+            self.root.after(0, lambda: self.video_result1_label.config(text=str(output1)))
+
+            if model2_path:
+                # 모델 2 추론
+                self.root.after(0, lambda: self.add_video_log("\n🎬 모델 2 추론 중..."))
+                output2 = self._infer_video(model2_path, video_path, "model2")
+                self.root.after(0, lambda: self.video_output2_var.set(output2))
+                self.root.after(0, lambda: self.video_result2_label.config(text=str(output2)))
+
+        except Exception as e:
+            self.root.after(0, lambda: self.add_video_log(f"\n❌ 추론 오류: {str(e)}"))
+            self.root.after(0, lambda: messagebox.showerror("추론 오류", f"추론 중 오류가 발생했습니다:\n{str(e)}"))
+
+        finally:
+            self.root.after(0, self._video_inference_complete)
+
+    def _infer_video(self, model_path, video_path, model_name):
+        """단일 모델로 동영상 추론"""
+        import subprocess
+
+        # detect.py 경로
+        detect_script = Path("yolov7/detect.py")
+        if not detect_script.exists():
+            raise FileNotFoundError(f"detect.py를 찾을 수 없습니다: {detect_script}")
+
+        # 출력 디렉토리
+        output_dir = f"runs/detect/{model_name}"
+
+        # 추론 명령어 구성
+        cmd = [
+            "python", str(detect_script),
+            "--source", video_path,
+            "--weights", model_path,
+            "--img-size", str(self.video_img_size_var.get()),
+            "--conf-thres", str(self.video_conf_thres_var.get()),
+            "--iou-thres", str(self.video_iou_thres_var.get()),
+            "--device", self.video_device_var.get(),
+            "--project", "runs/detect",
+            "--name", model_name,
+            "--exist-ok"
+        ]
+
+        self.root.after(0, lambda: self.add_video_log(f"실행 명령어: {' '.join(cmd)}"))
+
+        # 프로세스 실행
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+
+        # 실시간 출력 읽기
+        for line in process.stdout:
+            line = line.strip()
+            if line:
+                self.root.after(0, lambda l=line: self.add_video_log(l))
+
+        process.wait()
+
+        if process.returncode != 0:
+            raise RuntimeError(f"{model_name} 추론 실패 (return code: {process.returncode})")
+
+        # 출력 파일 경로 찾기
+        output_path = Path(output_dir)
+        if output_path.exists():
+            # 동영상 파일 찾기
+            video_extensions = ['.mp4', '.avi', '.mov', '.mkv']
+            for ext in video_extensions:
+                video_files = list(output_path.glob(f"*{ext}"))
+                if video_files:
+                    result_path = video_files[0]
+                    self.root.after(0, lambda: self.add_video_log(f"✅ 결과 영상 저장: {result_path}"))
+                    return str(result_path)
+
+        self.root.after(0, lambda: self.add_video_log(f"⚠️ 결과 영상을 찾을 수 없습니다. 디렉토리: {output_path}"))
+        return str(output_path) if output_path.exists() else "결과를 찾을 수 없음"
+
+    def _video_inference_complete(self):
+        """동영상 추론 완료 처리"""
+        self.is_inferencing = False
+        self.video_start_btn.config(state='normal')
+        self.video_progress.stop()
+        self.video_status_var.set("추론 완료")
+        self.add_video_log("\n" + "=" * 60)
+        self.add_video_log("✅ 모든 추론이 완료되었습니다.")
+        self.add_video_log("=" * 60)
+
+    def open_result_folder(self, model_num):
+        """결과 폴더 열기"""
+        import platform
+        import subprocess
+
+        folder_path = f"runs/detect/model{model_num}"
+        if Path(folder_path).exists():
+            if platform.system() == "Windows":
+                os.startfile(folder_path)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", folder_path])
+            else:  # Linux
+                subprocess.run(["xdg-open", folder_path])
+            self.add_video_log(f"📂 폴더 열기: {folder_path}")
+        else:
+            messagebox.showwarning("경고", f"결과 폴더를 찾을 수 없습니다:\n{folder_path}")
+
+    def play_result_video(self, model_num):
+        """결과 영상 재생"""
+        import platform
+        import subprocess
+
+        video_path_var = self.video_output1_var if model_num == 1 else self.video_output2_var
+        video_path = video_path_var.get()
+
+        if not video_path or not Path(video_path).exists():
+            messagebox.showwarning("경고", "재생할 영상이 없습니다.")
+            return
+
+        # 시스템 기본 플레이어로 재생
+        try:
+            if platform.system() == "Windows":
+                os.startfile(video_path)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", video_path])
+            else:  # Linux
+                subprocess.run(["xdg-open", video_path])
+            self.add_video_log(f"▶️ 영상 재생: {video_path}")
+        except Exception as e:
+            messagebox.showerror("재생 오류", f"영상 재생 중 오류가 발생했습니다:\n{str(e)}")
+
+    def compare_videos(self):
+        """두 결과 영상 비교 재생"""
+        video1 = self.video_output1_var.get()
+        video2 = self.video_output2_var.get()
+
+        if not video1 or not Path(video1).exists():
+            messagebox.showwarning("경고", "모델 1 결과 영상이 없습니다.")
+            return
+
+        if not video2 or not Path(video2).exists():
+            messagebox.showwarning("경고", "모델 2 결과 영상이 없습니다.")
+            return
+
+        # 두 영상을 나란히 재생 (간단한 구현: 각각 별도로 재생)
+        messagebox.showinfo("비교 재생", "두 영상을 별도 창에서 재생합니다.\n나란히 배치하여 비교해보세요.")
+        self.play_result_video(1)
+        time.sleep(0.5)  # 약간의 딜레이
+        self.play_result_video(2)
