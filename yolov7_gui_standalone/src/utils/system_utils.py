@@ -203,7 +203,18 @@ def extract_classes_from_pt(pt_path):
             return None
 
         # 모델 로드 (map_location='cpu'로 GPU 없이도 로드 가능)
-        checkpoint = torch.load(pt_path, map_location='cpu')
+        try:
+            checkpoint = torch.load(pt_path, map_location='cpu')
+        except RuntimeError as e:
+            if "corrupted" in str(e).lower() or "invalid" in str(e).lower():
+                print(f"⚠️ 손상된 모델 파일: {pt_path}")
+                return None
+            raise
+        except Exception as e:
+            if "pickle" in str(type(e).__name__).lower():
+                print(f"⚠️ 잘못된 PyTorch 모델 형식: {pt_path}")
+                return None
+            raise
 
         # 클래스 이름 추출 시도
         # YOLOv7은 보통 'names' 키에 클래스 정보 저장
@@ -228,8 +239,14 @@ def extract_classes_from_pt(pt_path):
 
         return None
 
+    except FileNotFoundError:
+        print(f"⚠️ 파일을 찾을 수 없음: {pt_path}")
+        return None
+    except PermissionError:
+        print(f"⚠️ 파일 접근 권한 없음: {pt_path}")
+        return None
     except Exception as e:
-        print(f"⚠️ PT 파일에서 클래스 추출 실패: {e}")
+        print(f"⚠️ PT 파일에서 클래스 추출 실패: {type(e).__name__}: {e}")
         return None
 
 def extract_classes_from_yaml(yaml_path):

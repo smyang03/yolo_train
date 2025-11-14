@@ -513,9 +513,11 @@ class YOLOv7Trainer:
                 self.process.kill()
                 self.process.wait()
 
-            # stdout 명시적으로 닫기
+            # stdout, stderr 명시적으로 닫기
             if self.process.stdout:
                 self.process.stdout.close()
+            if self.process.stderr:
+                self.process.stderr.close()
 
             # 모니터링 스레드 종료 대기
             if self.monitor_thread and self.monitor_thread.is_alive():

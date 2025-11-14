@@ -207,6 +207,14 @@ class MainWindow:
         self.selected_classes_video = []  # 동영상 추론에서 선택된 클래스 ID 리스트
         self.selected_classes_result = 'all'  # 결과 그래프에서 선택된 클래스 ('all' 또는 특정 클래스)
 
+        # 🔧 Subprocess 관리 (리소스 누수 방지)
+        self.eval_processes = []  # 실행 중인 평가 프로세스 리스트
+        self.video_processes = []  # 실행 중인 동영상 추론 프로세스 리스트
+        self.eval_cancelled = False  # 평가 취소 플래그
+        self.video_cancelled = False  # 동영상 추론 취소 플래그
+        self.current_eval_process = None  # 현재 실행 중인 평가 프로세스
+        self.current_video_process = None  # 현재 실행 중인 동영상 프로세스
+
     def create_ui(self):
         """Enhanced UI 생성"""
         self.root.title("🚀 YOLOv7 Enhanced Professional Training GUI")
@@ -230,7 +238,10 @@ class MainWindow:
 
         # 제어 버튼
         self.create_control_buttons()
-        
+
+        # Window close 이벤트 핸들러 등록
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
     def create_header(self):
         """헤더 생성"""
         header_frame = tk.Frame(self.root, bg='#2c3e50', height=80)
@@ -2177,16 +2188,17 @@ class MainWindow:
                 self.add_log_entry(f"🔧 병합 방식: {method}")
 
                 def update_progress(percent):
-                    self.root.after(0, lambda: self.merge_progress_var.set(percent))
+                    self.root.after(0, lambda p=percent: self.merge_progress_var.set(p))
 
                 result = merger.merge(method=method, show_progress=update_progress)
 
-                # 완료
-                self.root.after(0, lambda: self._on_merge_complete(result, output_dir))
+                # 완료 (Lambda 변수 캡처 수정)
+                self.root.after(0, lambda r=result, od=output_dir: self._on_merge_complete(r, od))
 
             except Exception as e:
                 error_msg = f"❌ 병합 실패: {e}"
-                self.root.after(0, lambda: self._on_merge_error(error_msg))
+                # Lambda 변수 캡처 수정
+                self.root.after(0, lambda em=error_msg: self._on_merge_error(em))
                 import traceback
                 traceback.print_exc()
 
@@ -2611,16 +2623,19 @@ class MainWindow:
         if not self.validate_settings():
             return
 
-        # Windows 환경에서 workers 수 검증 및 경고
+        # Windows 환경에서 workers 수 검증 및 강제 수정
         workers = self.workers_var.get()
         is_safe, warning_msg = validate_workers(workers)
         if not is_safe:
-            result = messagebox.askyesno("Workers 설정 경고", warning_msg)
-            if result:  # Yes 선택 시 workers를 1로 변경
-                self.workers_var.set(1)
+            # 안전하지 않은 값은 강제로 1로 변경
+            messagebox.showwarning(
+                "Workers 설정 자동 수정",
+                warning_msg + "\n\n자동으로 Workers=1로 설정됩니다."
+            )
+            self.workers_var.set(1)
+            if hasattr(self, 'workers_label'):
                 self.workers_label.config(text="1")
-                self.add_log_entry(f"⚙️ Workers를 {workers} → 1로 변경했습니다 (YOLOv7 호환)")
-            # No 선택 시 그대로 진행 (사용자 책임)
+            self.add_log_entry(f"⚙️ Workers를 {workers} → 1로 자동 변경했습니다 (YOLOv7 호환)")
 
         # 진행사항 탭으로 전환
         self.notebook.select(1)
@@ -3282,11 +3297,12 @@ class MainWindow:
         # 자동 스크롤
         self.log_text.see(tk.END)
         
-        # 로그 길이 제한 (1000줄)
-        lines = self.log_text.get("1.0", tk.END).split('\n')
-        if len(lines) > 1000:
-            # 처음 100줄 삭제
-            self.log_text.delete("1.0", "101.0")
+        # 로그 길이 제한 최적화 (1000줄 넘으면 절반 삭제)
+        # index를 사용하여 효율적으로 체크
+        line_count = int(self.log_text.index('end-1c').split('.')[0])
+        if line_count > 1000:
+            # 절반(500줄) 삭제하여 메모리 확보
+            self.log_text.delete("1.0", "501.0")
     
     def show(self):
         """윈도우 표시"""
@@ -3321,7 +3337,8 @@ class MainWindow:
 
     def on_metrics_update(self, metrics):
         """메트릭 업데이트 콜백"""
-        self.root.after(0, lambda: self._on_metrics_update_ui(metrics))
+        # Lambda 변수 캡처 수정
+        self.root.after(0, lambda m=metrics: self._on_metrics_update_ui(m))
 
     def _on_metrics_update_ui(self, metrics):
         """메트릭 업데이트 UI (메인 스레드)"""
@@ -3387,9 +3404,13 @@ class MainWindow:
                     # Best models 업데이트
                     self._update_best_models(metrics)
 
-                    # 차트 업데이트
+                    # 차트 업데이트 최적화 (10 에포크마다 또는 마지막 에포크에서만)
+                    epoch = metrics.get('epoch', 0)
+                    total_epochs = self.total_epochs
                     if MATPLOTLIB_AVAILABLE and len(self.metrics_data['epochs']) >= 2:
-                        self.update_charts()
+                        # 10 에포크마다 업데이트, 또는 마지막 에포크
+                        if epoch % 10 == 0 or epoch == total_epochs:
+                            self.update_charts()
 
         except Exception as e:
             print(f"⚠️ 메트릭 업데이트 오류: {e}")
@@ -3645,13 +3666,15 @@ class MainWindow:
                 self.root.after(0, lambda: self.add_eval_log("\n🔍 모델 2 평가 중..."))
                 result2 = self._evaluate_model(model2_path, data_path, "Model 2")
 
-            # 결과 저장 및 UI 업데이트
+            # 결과 저장 및 UI 업데이트 (Lambda 변수 캡처 수정)
             self.eval_results = {'model1': result1, 'model2': result2}
-            self.root.after(0, lambda: self._update_eval_results(result1, result2))
+            self.root.after(0, lambda r1=result1, r2=result2: self._update_eval_results(r1, r2))
 
         except Exception as e:
-            self.root.after(0, lambda: self.add_eval_log(f"\n❌ 평가 오류: {str(e)}"))
-            self.root.after(0, lambda: messagebox.showerror("평가 오류", f"평가 중 오류가 발생했습니다:\n{str(e)}"))
+            # Lambda 변수 캡처 수정
+            err_msg = str(e)
+            self.root.after(0, lambda em=err_msg: self.add_eval_log(f"\n❌ 평가 오류: {em}"))
+            self.root.after(0, lambda em=err_msg: messagebox.showerror("평가 오류", f"평가 중 오류가 발생했습니다:\n{em}"))
 
         finally:
             self.root.after(0, self._evaluation_complete)
@@ -3660,6 +3683,10 @@ class MainWindow:
         """단일 모델 평가"""
         import subprocess
         import re
+
+        # 취소 체크
+        if self.eval_cancelled:
+            raise RuntimeError("평가가 취소되었습니다")
 
         # test.py 경로
         test_script = Path("yolov7/test.py")
@@ -3686,9 +3713,13 @@ class MainWindow:
             cmd.append("--classes")
             for class_id in selected_classes:
                 cmd.append(str(class_id))
-            self.root.after(0, lambda: self.add_eval_log(f"🎯 선택된 클래스: {selected_classes}"))
+            # Lambda 변수 캡처 수정
+            classes_str = str(selected_classes)
+            self.root.after(0, lambda c=classes_str: self.add_eval_log(f"🎯 선택된 클래스: {c}"))
 
-        self.root.after(0, lambda: self.add_eval_log(f"실행 명령어: {' '.join(cmd)}"))
+        # Lambda 변수 캡처 수정
+        cmd_str = ' '.join(cmd)
+        self.root.after(0, lambda cs=cmd_str: self.add_eval_log(f"실행 명령어: {cs}"))
 
         # 프로세스 실행
         process = subprocess.Popen(
@@ -3699,51 +3730,85 @@ class MainWindow:
             bufsize=1
         )
 
-        # 결과 파싱을 위한 변수
-        precision = recall = map50 = map95 = 0.0
-        output_lines = []
+        # 프로세스 추적 (cleanup 가능하도록)
+        self.current_eval_process = process
+        self.eval_processes.append(process)
 
-        # 실시간 출력 읽기
-        for line in process.stdout:
-            line = line.strip()
-            output_lines.append(line)
-            if line:
-                self.root.after(0, lambda l=line: self.add_eval_log(l))
+        try:
+            # 결과 파싱을 위한 변수
+            precision = recall = map50 = map95 = 0.0
+            output_lines = []
 
-            # 결과 파싱
-            # "all" 줄에서 메트릭 추출: "all    <images>    <labels>    P    R    mAP@.5    mAP@.5:.95"
-            if line.startswith("all"):
-                parts = line.split()
-                if len(parts) >= 7:
-                    try:
-                        precision = float(parts[3])
-                        recall = float(parts[4])
-                        map50 = float(parts[5])
-                        map95 = float(parts[6])
-                    except (ValueError, IndexError):
-                        pass
+            # 실시간 출력 읽기
+            for line in process.stdout:
+                # 취소 체크
+                if self.eval_cancelled:
+                    process.terminate()
+                    raise RuntimeError("평가가 취소되었습니다")
 
-        process.wait()
+                line = line.strip()
+                output_lines.append(line)
+                if line:
+                    self.root.after(0, lambda l=line: self.add_eval_log(l))
 
-        if process.returncode != 0:
-            raise RuntimeError(f"{model_name} 평가 실패 (return code: {process.returncode})")
+                # 결과 파싱
+                # "all" 줄에서 메트릭 추출: "all    <images>    <labels>    P    R    mAP@.5    mAP@.5:.95"
+                if line.startswith("all"):
+                    parts = line.split()
+                    if len(parts) >= 7:
+                        try:
+                            precision = float(parts[3])
+                            recall = float(parts[4])
+                            map50 = float(parts[5])
+                            map95 = float(parts[6])
+                        except (ValueError, IndexError):
+                            pass
 
-        result = {
-            'model_name': model_name,
-            'precision': precision,
-            'recall': recall,
-            'map50': map50,
-            'map95': map95,
-            'f1': 2 * precision * recall / (precision + recall + 1e-6)
-        }
+            # Timeout 추가 (최대 5분)
+            try:
+                process.wait(timeout=300)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                raise RuntimeError(f"{model_name} 평가 타임아웃 (5분 초과)")
 
-        self.root.after(0, lambda: self.add_eval_log(f"\n✅ {model_name} 평가 완료:"))
-        self.root.after(0, lambda: self.add_eval_log(f"   Precision: {precision:.4f}"))
-        self.root.after(0, lambda: self.add_eval_log(f"   Recall: {recall:.4f}"))
-        self.root.after(0, lambda: self.add_eval_log(f"   mAP@0.5: {map50:.4f}"))
-        self.root.after(0, lambda: self.add_eval_log(f"   mAP@0.5:0.95: {map95:.4f}"))
+            if process.returncode != 0:
+                raise RuntimeError(f"{model_name} 평가 실패 (return code: {process.returncode})")
 
-        return result
+            result = {
+                'model_name': model_name,
+                'precision': precision,
+                'recall': recall,
+                'map50': map50,
+                'map95': map95,
+                'f1': 2 * precision * recall / (precision + recall + 1e-6)
+            }
+
+            # Lambda 변수 캡처 수정
+            mname = model_name
+            p = precision
+            r = recall
+            m50 = map50
+            m95 = map95
+            self.root.after(0, lambda mn=mname: self.add_eval_log(f"\n✅ {mn} 평가 완료:"))
+            self.root.after(0, lambda pv=p: self.add_eval_log(f"   Precision: {pv:.4f}"))
+            self.root.after(0, lambda rv=r: self.add_eval_log(f"   Recall: {rv:.4f}"))
+            self.root.after(0, lambda m50v=m50: self.add_eval_log(f"   mAP@0.5: {m50v:.4f}"))
+            self.root.after(0, lambda m95v=m95: self.add_eval_log(f"   mAP@0.5:0.95: {m95v:.4f}"))
+
+            return result
+
+        finally:
+            # 프로세스 정리 (stdout 파이프 명시적으로 닫기)
+            if process.stdout:
+                try:
+                    process.stdout.close()
+                except:
+                    pass
+            if process in self.eval_processes:
+                self.eval_processes.remove(process)
+            if self.current_eval_process == process:
+                self.current_eval_process = None
 
     def _update_eval_results(self, result1, result2):
         """평가 결과 테이블 업데이트"""
@@ -3875,19 +3940,25 @@ class MainWindow:
             # 모델 1 추론
             self.root.after(0, lambda: self.add_video_log("\n🎬 모델 1 추론 중..."))
             output1 = self._infer_video(model1_path, video_path, "model1")
-            self.root.after(0, lambda: self.video_output1_var.set(output1))
-            self.root.after(0, lambda: self.video_result1_label.config(text=str(output1)))
+            # Lambda 변수 캡처 수정
+            o1 = output1
+            self.root.after(0, lambda out=o1: self.video_output1_var.set(out))
+            self.root.after(0, lambda out=o1: self.video_result1_label.config(text=str(out)))
 
             if model2_path:
                 # 모델 2 추론
                 self.root.after(0, lambda: self.add_video_log("\n🎬 모델 2 추론 중..."))
                 output2 = self._infer_video(model2_path, video_path, "model2")
-                self.root.after(0, lambda: self.video_output2_var.set(output2))
-                self.root.after(0, lambda: self.video_result2_label.config(text=str(output2)))
+                # Lambda 변수 캡처 수정
+                o2 = output2
+                self.root.after(0, lambda out=o2: self.video_output2_var.set(out))
+                self.root.after(0, lambda out=o2: self.video_result2_label.config(text=str(out)))
 
         except Exception as e:
-            self.root.after(0, lambda: self.add_video_log(f"\n❌ 추론 오류: {str(e)}"))
-            self.root.after(0, lambda: messagebox.showerror("추론 오류", f"추론 중 오류가 발생했습니다:\n{str(e)}"))
+            # Lambda 변수 캡처 수정
+            err_msg = str(e)
+            self.root.after(0, lambda em=err_msg: self.add_video_log(f"\n❌ 추론 오류: {em}"))
+            self.root.after(0, lambda em=err_msg: messagebox.showerror("추론 오류", f"추론 중 오류가 발생했습니다:\n{em}"))
 
         finally:
             self.root.after(0, self._video_inference_complete)
@@ -3895,6 +3966,10 @@ class MainWindow:
     def _infer_video(self, model_path, video_path, model_name):
         """단일 모델로 동영상 추론"""
         import subprocess
+
+        # 취소 체크
+        if self.video_cancelled:
+            raise RuntimeError("동영상 추론이 취소되었습니다")
 
         # detect.py 경로
         detect_script = Path("yolov7/detect.py")
@@ -3924,14 +3999,20 @@ class MainWindow:
             cmd.append("--classes")
             for class_id in selected_classes:
                 cmd.append(str(class_id))
-            self.root.after(0, lambda: self.add_video_log(f"🎯 선택된 클래스: {selected_classes}"))
+            # Lambda 변수 캡처 수정
+            classes_str = str(selected_classes)
+            self.root.after(0, lambda c=classes_str: self.add_video_log(f"🎯 선택된 클래스: {c}"))
 
         # FPS 설정 (환경 변수로 전달, detect.py에서 지원하는 경우)
         fps = self.video_fps_var.get()
         if fps and fps != 30:
-            self.root.after(0, lambda: self.add_video_log(f"⚙️ Output FPS: {fps} (기본값이 아닌 경우 출력 영상에 적용 시도)"))
+            # Lambda 변수 캡처 수정
+            fps_val = fps
+            self.root.after(0, lambda f=fps_val: self.add_video_log(f"⚙️ Output FPS: {f} (기본값이 아닌 경우 출력 영상에 적용 시도)"))
 
-        self.root.after(0, lambda: self.add_video_log(f"실행 명령어: {' '.join(cmd)}"))
+        # Lambda 변수 캡처 수정
+        cmd_str = ' '.join(cmd)
+        self.root.after(0, lambda cs=cmd_str: self.add_video_log(f"실행 명령어: {cs}"))
 
         # 프로세스 실행
         process = subprocess.Popen(
@@ -3942,31 +4023,63 @@ class MainWindow:
             bufsize=1
         )
 
-        # 실시간 출력 읽기
-        for line in process.stdout:
-            line = line.strip()
-            if line:
-                self.root.after(0, lambda l=line: self.add_video_log(l))
+        # 프로세스 추적 (cleanup 가능하도록)
+        self.current_video_process = process
+        self.video_processes.append(process)
 
-        process.wait()
+        try:
+            # 실시간 출력 읽기
+            for line in process.stdout:
+                # 취소 체크
+                if self.video_cancelled:
+                    process.terminate()
+                    raise RuntimeError("동영상 추론이 취소되었습니다")
 
-        if process.returncode != 0:
-            raise RuntimeError(f"{model_name} 추론 실패 (return code: {process.returncode})")
+                line = line.strip()
+                if line:
+                    self.root.after(0, lambda l=line: self.add_video_log(l))
 
-        # 출력 파일 경로 찾기
-        output_path = Path(output_dir)
-        if output_path.exists():
-            # 동영상 파일 찾기
-            video_extensions = ['.mp4', '.avi', '.mov', '.mkv']
-            for ext in video_extensions:
-                video_files = list(output_path.glob(f"*{ext}"))
-                if video_files:
-                    result_path = video_files[0]
-                    self.root.after(0, lambda: self.add_video_log(f"✅ 결과 영상 저장: {result_path}"))
-                    return str(result_path)
+            # Timeout 추가 (최대 30분 - 동영상 처리는 시간이 오래 걸릴 수 있음)
+            try:
+                process.wait(timeout=1800)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                raise RuntimeError(f"{model_name} 추론 타임아웃 (30분 초과)")
 
-        self.root.after(0, lambda: self.add_video_log(f"⚠️ 결과 영상을 찾을 수 없습니다. 디렉토리: {output_path}"))
-        return str(output_path) if output_path.exists() else "결과를 찾을 수 없음"
+            if process.returncode != 0:
+                raise RuntimeError(f"{model_name} 추론 실패 (return code: {process.returncode})")
+
+            # 출력 파일 경로 찾기
+            output_path = Path(output_dir)
+            if output_path.exists():
+                # 동영상 파일 찾기
+                video_extensions = ['.mp4', '.avi', '.mov', '.mkv']
+                for ext in video_extensions:
+                    video_files = list(output_path.glob(f"*{ext}"))
+                    if video_files:
+                        result_path = video_files[0]
+                        # Lambda 변수 캡처 수정
+                        rpath = str(result_path)
+                        self.root.after(0, lambda rp=rpath: self.add_video_log(f"✅ 결과 영상 저장: {rp}"))
+                        return str(result_path)
+
+            # Lambda 변수 캡처 수정
+            opath = str(output_path)
+            self.root.after(0, lambda op=opath: self.add_video_log(f"⚠️ 결과 영상을 찾을 수 없습니다. 디렉토리: {op}"))
+            return str(output_path) if output_path.exists() else "결과를 찾을 수 없음"
+
+        finally:
+            # 프로세스 정리 (stdout 파이프 명시적으로 닫기)
+            if process.stdout:
+                try:
+                    process.stdout.close()
+                except:
+                    pass
+            if process in self.video_processes:
+                self.video_processes.remove(process)
+            if self.current_video_process == process:
+                self.current_video_process = None
 
     def _video_inference_complete(self):
         """동영상 추론 완료 처리"""
@@ -4164,3 +4277,106 @@ class MainWindow:
                     pass
 
         return selected_classes if selected_classes else None
+
+    def cleanup_processes(self):
+        """모든 subprocess 정리 (앱 종료 시 호출)"""
+        import subprocess
+
+        print("🧹 Subprocess 정리 중...")
+
+        # 현재 실행 중인 평가 프로세스 종료
+        if self.current_eval_process and self.current_eval_process.poll() is None:
+            try:
+                print("⚠️ 평가 프로세스 종료 중...")
+                self.current_eval_process.terminate()
+                try:
+                    self.current_eval_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print("⚠️ 평가 프로세스 강제 종료")
+                    self.current_eval_process.kill()
+                    self.current_eval_process.wait()
+                # stdout 명시적으로 닫기
+                if self.current_eval_process.stdout:
+                    try:
+                        self.current_eval_process.stdout.close()
+                    except:
+                        pass
+            except Exception as e:
+                print(f"⚠️ 평가 프로세스 종료 실패: {e}")
+
+        # 현재 실행 중인 동영상 프로세스 종료
+        if self.current_video_process and self.current_video_process.poll() is None:
+            try:
+                print("⚠️ 동영상 프로세스 종료 중...")
+                self.current_video_process.terminate()
+                try:
+                    self.current_video_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print("⚠️ 동영상 프로세스 강제 종료")
+                    self.current_video_process.kill()
+                    self.current_video_process.wait()
+                # stdout 명시적으로 닫기
+                if self.current_video_process.stdout:
+                    try:
+                        self.current_video_process.stdout.close()
+                    except:
+                        pass
+            except Exception as e:
+                print(f"⚠️ 동영상 프로세스 종료 실패: {e}")
+
+        # 모든 평가 프로세스 정리
+        for proc in self.eval_processes:
+            if proc.poll() is None:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                except:
+                    try:
+                        proc.kill()
+                    except:
+                        pass
+
+        # 모든 동영상 프로세스 정리
+        for proc in self.video_processes:
+            if proc.poll() is None:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                except:
+                    try:
+                        proc.kill()
+                    except:
+                        pass
+
+        # 리스트 초기화
+        self.eval_processes.clear()
+        self.video_processes.clear()
+        self.current_eval_process = None
+        self.current_video_process = None
+
+        print("✅ Subprocess 정리 완료")
+
+    def on_closing(self):
+        """앱 종료 시 호출되는 메서드"""
+        print("🚪 애플리케이션 종료 중...")
+
+        # 훈련 중이면 확인 대화상자 표시
+        if self.is_training:
+            from tkinter import messagebox
+            result = messagebox.askyesno(
+                "훈련 진행 중",
+                "훈련이 진행 중입니다.\n정말 종료하시겠습니까?\n\n(진행 중인 훈련은 중지됩니다)"
+            )
+            if not result:
+                return  # 취소
+
+        # 모든 프로세스 정리
+        self.cleanup_processes()
+
+        # Trainer 정리
+        if hasattr(self, 'trainer'):
+            self.trainer.cleanup()
+
+        # 창 종료
+        self.root.destroy()
+        print("✅ 애플리케이션 종료 완료")
