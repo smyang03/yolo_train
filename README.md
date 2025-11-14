@@ -29,19 +29,117 @@ YOLOv7 모델을 명령줄 없이 직관적인 그래픽 인터페이스로 훈�
 
 ---
 
-## 📦 빠른 시작
+## 📦 실행 방법
+
+### 방법 1: Python으로 직접 실행 (개발/테스트)
+
+**환경 구성:**
 
 ```bash
-# 1. Conda 환경 생성
+# 1. YOLOv7 원본 레포지토리 클론 (필수!)
+git clone https://github.com/WongKinYiu/yolov7.git
+
+# 2. Conda 환경 생성
 conda env create -f environment.yaml
 conda activate yolov7
 
-# 2. GUI 실행
+# 3. PyTorch 설치 (CUDA 11.6)
+pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 --extra-index-url https://download.pytorch.org/whl/cu116
+
+# 4. 추가 의존성 설치
+pip install matplotlib pyyaml opencv-python pillow tqdm
+```
+
+**실행:**
+
+```bash
 cd yolov7_gui_standalone
 python main.py
+```
 
-# 3. EXE 빌드 (배포용)
+**장점:**
+- 즉시 코드 수정 및 테스트 가능
+- 디버깅 용이
+- 개발 환경에 적합
+
+**단점:**
+- Python 환경 필요
+- 의존성 수동 관리 필요
+
+---
+
+### 방법 2: EXE 파일 빌드 (배포/사용자)
+
+**EXE 빌드 과정:**
+
+```bash
+# 1. Python 환경이 준비된 상태에서
+cd yolov7_gui_standalone
+
+# 2. PyInstaller 설치
+pip install pyinstaller
+
+# 3. EXE 빌드 (단일 폴더 방식 - 권장)
 python build_exe.py onedir
+
+# 또는 단일 파일 방식 (느리지만 단일 EXE)
+python build_exe.py onefile
+```
+
+**빌드 결과:**
+
+```
+dist/
+└── YOLOv7_Training_GUI/     # 이 폴더를 배포
+    ├── YOLOv7_Training_GUI.exe
+    ├── _internal/           # 필요한 DLL, 라이브러리
+    └── ...
+```
+
+**배포 패키지 구성:**
+
+```
+YOLOv7_Training_Package/
+├── YOLOv7_Training_GUI/     # 빌드된 EXE 폴더
+│   └── YOLOv7_Training_GUI.exe
+└── yolov7/                   # YOLOv7 원본 (필수!)
+    ├── train.py
+    ├── test.py
+    ├── models/
+    ├── utils/
+    └── cfg/
+```
+
+**실행:**
+1. `YOLOv7_Training_Package` 폴더 전체를 사용자에게 전달
+2. 사용자는 `YOLOv7_Training_GUI/YOLOv7_Training_GUI.exe` 더블 클릭
+3. Python 설치 불필요!
+
+**장점:**
+- Python 설치 불필요
+- 일반 사용자에게 편리
+- 깔끔한 배포
+
+**단점:**
+- 빌드 시간 소요 (5-10분)
+- 파일 크기 큼 (~500MB-1GB)
+- 수정 시 재빌드 필요
+
+---
+
+## 📋 빠른 시작 요약
+
+**개발자/테스트:**
+```bash
+conda activate yolov7
+cd yolov7_gui_standalone
+python main.py
+```
+
+**최종 사용자 배포:**
+```bash
+python build_exe.py onedir
+# → dist/YOLOv7_Training_GUI/ 폴더 + yolov7/ 폴더 함께 배포
 ```
 
 ---
