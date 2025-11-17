@@ -2,10 +2,21 @@
 설정 관리 모듈 (Python 3.8+ 호환) - 경로 문제 해결
 """
 
+import sys
+import io
 import yaml
 from pathlib import Path
 from typing import Dict, Any
 import os
+
+# Windows 콘솔 UTF-8 인코딩 설정
+if sys.platform == 'win32':
+    try:
+        if sys.version_info >= (3, 7):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 class ConfigManager:
     """설정 관리 클래스"""

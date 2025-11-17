@@ -3,9 +3,20 @@ YOLOv7 로그 파서
 훈련 로그에서 메트릭을 추출하는 모듈
 """
 
+import sys
+import io
 import re
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
+
+# Windows 콘솔 UTF-8 인코딩 설정
+if sys.platform == 'win32':
+    try:
+        if sys.version_info >= (3, 7):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 
 @dataclass

@@ -7,6 +7,16 @@ import sys
 import os
 import tkinter as tk
 from pathlib import Path
+import io
+
+# Windows 콘솔 UTF-8 인코딩 설정 (이모지 및 한글 출력 지원)
+if sys.platform == 'win32':
+    try:
+        if sys.version_info >= (3, 7):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 def get_resource_path(relative_path):
     """리소스 파일 경로 반환"""

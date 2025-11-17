@@ -7,7 +7,18 @@ import sys
 import os
 import traceback
 from pathlib import Path
-import os
+import io
+
+# Windows 콘솔 UTF-8 인코딩 설정 (이모지 및 한글 출력 지원)
+if sys.platform == 'win32':
+    try:
+        # Python 3.7+에서는 UTF-8 모드 활성화
+        if sys.version_info >= (3, 7):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 # 경로 설정

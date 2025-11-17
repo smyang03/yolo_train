@@ -6,6 +6,7 @@ import time
 import json
 import os
 import sys
+import io
 import signal
 import traceback
 from pathlib import Path
@@ -13,6 +14,15 @@ from queue import Queue, Empty
 from datetime import datetime
 import yaml
 import re
+
+# Windows 콘솔 UTF-8 인코딩 설정
+if sys.platform == 'win32':
+    try:
+        if sys.version_info >= (3, 7):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 # 로그 파서 import
 from core.log_parser import YOLOv7LogParser
