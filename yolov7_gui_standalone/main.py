@@ -64,61 +64,74 @@ def check_requirements():
 
 def main():
     """메인 실행 함수"""
-    
+
     print("🚀 YOLOv7 Training GUI 시작...")
     print("=" * 50)
-    
+
     try:
         # 필수 패키지 확인
         if not check_requirements():
             input("\n패키지를 설치한 후 Enter를 누르세요...")
             return
-        
+
         print("✅ 모든 필수 패키지가 설치되어 있습니다.")
-        
-        # GUI 애플리케이션 시작 (간단한 UI 생성 부분 제거)
+
+        # GUI 애플리케이션 시작
         from app import YOLOv7App
-        
+
         print("🎯 애플리케이션 초기화 중...")
         app = YOLOv7App()
-        
+
         print("🎨 Professional GUI 시작 중...")
         app.run()
-        
+
     except KeyboardInterrupt:
         print("\n👋 사용자에 의해 종료되었습니다.")
-    
+
     except ImportError as e:
         print(f"❌ 모듈 임포트 오류: {e}")
+        print(f"상세 정보: {traceback.format_exc()}")
         print("\n🔧 해결 방법:")
         print("1. 필요한 패키지가 설치되었는지 확인")
         print("2. 가상환경이 활성화되었는지 확인")
         print("3. Python 경로가 올바른지 확인")
-        
+        input("\nEnter를 눌러 종료...")
+
     except Exception as e:
-        # 에러 로깅
+        # 에러 로깅 - 자세한 정보 출력
         error_log = current_dir / "error.log"
-        with open(error_log, "w", encoding='utf-8') as f:
-            f.write(f"Error: {str(e)}\n")
-            f.write(traceback.format_exc())
-        
+        error_msg = f"Error: {str(e)}\n\nTraceback:\n{traceback.format_exc()}\n\nSystem Info:\n"
+        error_msg += f"Python: {sys.version}\n"
+        error_msg += f"Platform: {sys.platform}\n"
+        error_msg += f"Executable: {sys.executable}\n"
+        error_msg += f"Current Dir: {current_dir}\n"
+
+        try:
+            with open(error_log, "w", encoding='utf-8') as f:
+                f.write(error_msg)
+        except:
+            pass
+
         print(f"❌ 애플리케이션 오류: {str(e)}")
-        print(f"📝 자세한 오류 정보가 {error_log}에 저장되었습니다.")
-        
+        print(f"\n상세 에러 정보:")
+        print(traceback.format_exc())
+        print(f"\n📝 자세한 오류 정보가 {error_log}에 저장되었습니다.")
+
         # 사용자에게 에러 알림
         try:
             import tkinter as tk
             from tkinter import messagebox
-            
+
             root = tk.Tk()
             root.withdraw()
             messagebox.showerror(
-                "오류 발생", 
+                "오류 발생",
                 f"애플리케이션 실행 중 오류가 발생했습니다.\n\n{str(e)}\n\n자세한 내용은 error.log 파일을 확인하세요."
             )
         except:
             print("GUI 오류 알림 표시 실패")
-        
+
+        input("\nEnter를 눌러 종료...")
         sys.exit(1)
 
 if __name__ == "__main__":
