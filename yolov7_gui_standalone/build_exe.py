@@ -37,6 +37,13 @@ class ExeBuilder:
         else:
             print(f"⚠️ 경고: yolov7_embedded 디렉토리를 찾을 수 없습니다: {yolov7_embedded_path}")
 
+        # src 디렉토리 확인 및 추가 (Python 모듈로 포함)
+        src_path = self.project_root / "src"
+        if src_path.exists():
+            self.datas.append((str(src_path), "src"))
+        else:
+            print(f"⚠️ 경고: src 디렉토리를 찾을 수 없습니다: {src_path}")
+
         # 숨겨진 import들 (PyInstaller가 자동 감지 못하는 모듈)
         self.hidden_imports = [
             # 딥러닝 프레임워크
@@ -77,6 +84,23 @@ class ExeBuilder:
             # YOLO 관련
             'yolov7_embedded',
             'yolov7_embedded.train_core',
+
+            # 애플리케이션 모듈들 (src 디렉토리)
+            'app',
+            'core',
+            'core.yolo_trainer',
+            'core.config_manager',
+            'core.model_manager',
+            'core.log_parser',
+            'core.dataset_merger',
+            'ui',
+            'ui.main_window',
+            'ui.components',
+            'ui.styles',
+            'utils',
+            'utils.system_utils',
+            'utils.file_utils',
+            'utils.validation',
         ]
 
     def clean_build(self):
@@ -111,7 +135,7 @@ block_cipher = None
 
 a = Analysis(
     ['main.py'],
-    pathex=[r'{str(self.project_root)}'],
+    pathex=[r'{str(self.project_root)}', r'{str(self.project_root / "src")}'],
     binaries=[],
     datas=[{datas_str}],
     hiddenimports=[{hidden_imports_str}],
