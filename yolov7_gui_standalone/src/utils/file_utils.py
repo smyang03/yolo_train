@@ -42,11 +42,11 @@ def copy_file(src: str, dst: str, overwrite: bool = False) -> bool:
         dst_path = Path(dst)
 
         if not src_path.exists():
-            print(f"원본 파일을 찾을 수 없습니다: {src}")
+            safe_print(f"원본 파일을 찾을 수 없습니다: {src}")
             return False
 
         if dst_path.exists() and not overwrite:
-            print(f"대상 파일이 이미 존재합니다: {dst}")
+            safe_print(f"대상 파일이 이미 존재합니다: {dst}")
             return False
 
         # 대상 디렉토리 생성
@@ -57,7 +57,7 @@ def copy_file(src: str, dst: str, overwrite: bool = False) -> bool:
         return True
 
     except Exception as e:
-        print(f"파일 복사 실패: {e}")
+        safe_print(f"파일 복사 실패: {e}")
         return False
 
 
@@ -77,11 +77,11 @@ def move_file(src: str, dst: str, overwrite: bool = False) -> bool:
         dst_path = Path(dst)
 
         if not src_path.exists():
-            print(f"원본 파일을 찾을 수 없습니다: {src}")
+            safe_print(f"원본 파일을 찾을 수 없습니다: {src}")
             return False
 
         if dst_path.exists() and not overwrite:
-            print(f"대상 파일이 이미 존재합니다: {dst}")
+            safe_print(f"대상 파일이 이미 존재합니다: {dst}")
             return False
 
         # 대상 디렉토리 생성
@@ -92,7 +92,7 @@ def move_file(src: str, dst: str, overwrite: bool = False) -> bool:
         return True
 
     except Exception as e:
-        print(f"파일 이동 실패: {e}")
+        safe_print(f"파일 이동 실패: {e}")
         return False
 
 
@@ -112,7 +112,7 @@ def delete_file(file_path: str) -> bool:
             return True
         return False
     except Exception as e:
-        print(f"파일 삭제 실패: {e}")
+        safe_print(f"파일 삭제 실패: {e}")
         return False
 
 
@@ -139,7 +139,7 @@ def get_file_size(file_path: str, unit: str = 'MB') -> float:
         return size_bytes / divisor
 
     except Exception as e:
-        print(f"파일 크기 확인 실패: {e}")
+        safe_print(f"파일 크기 확인 실패: {e}")
         return 0.0
 
 
@@ -168,7 +168,7 @@ def list_files(directory: str, pattern: str = "*", recursive: bool = False) -> L
         return [f for f in files if f.is_file()]
 
     except Exception as e:
-        print(f"파일 목록 조회 실패: {e}")
+        safe_print(f"파일 목록 조회 실패: {e}")
         return []
 
 
@@ -185,7 +185,7 @@ def read_yaml(file_path: str) -> Optional[Dict[str, Any]]:
         with open(file_path, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
     except Exception as e:
-        print(f"YAML 파일 읽기 실패: {e}")
+        safe_print(f"YAML 파일 읽기 실패: {e}")
         return None
 
 
@@ -206,7 +206,7 @@ def write_yaml(data: Dict[str, Any], file_path: str) -> bool:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return True
     except Exception as e:
-        print(f"YAML 파일 쓰기 실패: {e}")
+        safe_print(f"YAML 파일 쓰기 실패: {e}")
         return False
 
 
@@ -223,7 +223,7 @@ def read_json(file_path: str) -> Optional[Dict[str, Any]]:
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        print(f"JSON 파일 읽기 실패: {e}")
+        safe_print(f"JSON 파일 읽기 실패: {e}")
         return None
 
 
@@ -245,7 +245,7 @@ def write_json(data: Dict[str, Any], file_path: str, indent: int = 4) -> bool:
             json.dump(data, f, indent=indent, ensure_ascii=False)
         return True
     except Exception as e:
-        print(f"JSON 파일 쓰기 실패: {e}")
+        safe_print(f"JSON 파일 쓰기 실패: {e}")
         return False
 
 
@@ -295,7 +295,7 @@ def cleanup_old_files(directory: str, days: int = 7, pattern: str = "*") -> int:
         return deleted_count
 
     except Exception as e:
-        print(f"파일 정리 실패: {e}")
+        safe_print(f"파일 정리 실패: {e}")
         return 0
 
 
@@ -322,7 +322,7 @@ def get_directory_size(directory: str, unit: str = 'MB') -> float:
         return total_size / divisor
 
     except Exception as e:
-        print(f"디렉토리 크기 계산 실패: {e}")
+        safe_print(f"디렉토리 크기 계산 실패: {e}")
         return 0.0
 
 
@@ -351,18 +351,18 @@ def create_backup(file_path: str, backup_dir: Optional[str] = None) -> bool:
         return True
 
     except Exception as e:
-        print(f"백업 생성 실패: {e}")
+        safe_print(f"백업 생성 실패: {e}")
         return False
 
 
 # 사용 예시
 if __name__ == "__main__":
     # 테스트
-    print("파일 유틸리티 테스트")
+    safe_print("파일 유틸리티 테스트")
 
     # 디렉토리 생성
     test_dir = ensure_dir("./test_output")
-    print(f"디렉토리 생성: {test_dir}")
+    safe_print(f"디렉토리 생성: {test_dir}")
 
     # YAML 쓰기/읽기 테스트
     test_data = {
@@ -373,14 +373,14 @@ if __name__ == "__main__":
 
     yaml_file = test_dir / "test.yaml"
     if write_yaml(test_data, str(yaml_file)):
-        print(f"YAML 파일 저장: {yaml_file}")
+        safe_print(f"YAML 파일 저장: {yaml_file}")
         loaded = read_yaml(str(yaml_file))
-        print(f"YAML 파일 로드: {loaded}")
+        safe_print(f"YAML 파일 로드: {loaded}")
 
     # 파일 크기 확인
     size = get_file_size(str(yaml_file))
-    print(f"파일 크기: {size:.2f} MB")
+    safe_print(f"파일 크기: {size:.2f} MB")
 
     # 파일 목록
     files = list_files(str(test_dir), "*.yaml")
-    print(f"YAML 파일들: {[f.name for f in files]}")
+    safe_print(f"YAML 파일들: {[f.name for f in files]}")

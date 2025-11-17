@@ -6,7 +6,6 @@ import time
 import json
 import os
 import sys
-import io
 import signal
 import traceback
 from pathlib import Path
@@ -15,14 +14,8 @@ from datetime import datetime
 import yaml
 import re
 
-# Windows 콘솔 UTF-8 인코딩 설정
-if sys.platform == 'win32':
-    try:
-        if sys.version_info >= (3, 7):
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-    except Exception:
-        pass
+# 안전한 print 함수 import
+from utils import safe_print
 
 # 로그 파서 import
 from core.log_parser import YOLOv7LogParser
@@ -66,19 +59,19 @@ class YOLOv7Trainer:
         ])
 
         self.yolo_original_dir = None
-        print(f"🔍 YOLOv7 경로 탐색 중...")
+        safe_print(f"🔍 YOLOv7 경로 탐색 중...")
         for candidate in yolo_candidates:
-            print(f"   확인: {candidate}")
+            safe_print(f"   확인: {candidate}")
             if candidate.exists() and (candidate / "train.py").exists():
                 self.yolo_original_dir = candidate
-                print(f"   ✅ 찾음: {candidate}")
+                safe_print(f"   ✅ 찾음: {candidate}")
                 break
 
         # 찾지 못한 경우 기본값 설정
         if self.yolo_original_dir is None:
             self.yolo_original_dir = self.project_workspace / "yolov7"
-            print(f"   ⚠️ YOLOv7을 찾지 못했습니다. 기본 경로 사용: {self.yolo_original_dir}")
-            print(f"   💡 힌트: YOLOV7_PATH 환경 변수를 설정하거나 yolov7 폴더를 EXE와 같은 위치에 배치하세요.")
+            safe_print(f"   ⚠️ YOLOv7을 찾지 못했습니다. 기본 경로 사용: {self.yolo_original_dir}")
+            safe_print(f"   💡 힌트: YOLOV7_PATH 환경 변수를 설정하거나 yolov7 폴더를 EXE와 같은 위치에 배치하세요.")
 
         self.train_script = self.yolo_original_dir / "train.py"
         
@@ -107,7 +100,7 @@ class YOLOv7Trainer:
                 f"train.py 파일을 찾을 수 없습니다: {self.train_script}"
             )
         
-        print(f"✅ YOLOv7 경로 확인: {self.yolo_original_dir}")
+        safe_print(f"✅ YOLOv7 경로 확인: {self.yolo_original_dir}")
         
     def reset_state(self):
         """훈련 상태 초기화"""
@@ -140,7 +133,7 @@ class YOLOv7Trainer:
                 try:
                     callback(data)
                 except Exception as e:
-                    print(f"콜백 실행 오류 ({event}): {e}")
+                    safe_print(f"콜백 실행 오류 ({event}): {e}")
     
     def build_command(self, config):
         """YOLOv7 훈련 명령어 구성 - 하이퍼파라미터는 YAML 파일로만 처리"""
@@ -150,7 +143,7 @@ class YOLOv7Trainer:
         workers = config.get("workers", 8)
         if workers == 0:
             workers = 1
-            print("⚠️ workers=0은 YOLOv7에서 오류를 일으킵니다. 자동으로 1로 조정합니다.")
+            safe_print("⚠️ workers=0은 YOLOv7에서 오류를 일으킵니다. 자동으로 1로 조정합니다.")
 
         # 기본 명령어 (하이퍼파라미터 값 제외)
         cmd = [
@@ -176,10 +169,10 @@ class YOLOv7Trainer:
         if hyp_file:
             # 사용자가 지정한 하이퍼파라미터 파일 사용
             cmd.extend(["--hyp", str(hyp_file)])
-            print(f"📄 사용자 지정 하이퍼파라미터 파일: {hyp_file}")
+            safe_print(f"📄 사용자 지정 하이퍼파라미터 파일: {hyp_file}")
         else:
             # 하이퍼파라미터 파일이 없으면 YOLOv7 기본값 사용 (--hyp 옵션 생략)
-            print("📄 YOLOv7 기본 하이퍼파라미터 사용")
+            safe_print("📄 YOLOv7 기본 하이퍼파라미터 사용")
         
         # 훈련 옵션들 (하이퍼파라미터와 별개)
         if config.get("cache_images"):
@@ -205,7 +198,7 @@ class YOLOv7Trainer:
             # 지원하지 않으면 무시됨 (에러 없음)
             try:
                 cmd.append("--amp")
-                print("🔥 Mixed Precision (AMP) 활성화 - 메모리 50% 절약!")
+                safe_print("🔥 Mixed Precision (AMP) 활성화 - 메모리 50% 절약!")
             except:
                 pass
         
@@ -231,8 +224,8 @@ class YOLOv7Trainer:
         if config.get("memory_optimize", False):
             # CUDA 메모리 fragmentation 방지
             os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
-            print("🔥 메모리 Fragmentation 방지 활성화!")
-            print("   PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128")
+            safe_print("🔥 메모리 Fragmentation 방지 활성화!")
+            safe_print("   PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128")
 
         self.training_config = config.copy()
         self.start_time = time.time()
@@ -244,8 +237,8 @@ class YOLOv7Trainer:
         if cmd[0] == 'python':
             cmd.insert(1, '-u')
 
-        print("🚀 YOLOv7 훈련 시작...")
-        print(f"명령어: {' '.join(cmd)}")
+        safe_print("🚀 YOLOv7 훈련 시작...")
+        safe_print(f"명령어: {' '.join(cmd)}")
 
         try:
             # 디버그 모드 확인 (환경변수 또는 기본값)
@@ -263,7 +256,7 @@ class YOLOv7Trainer:
             )
 
             # ✨ 프로세스 시작 확인 (2초 대기 후 상태 체크)
-            print("⏳ 프로세스 시작 확인 중...")
+            safe_print("⏳ 프로세스 시작 확인 중...")
             time.sleep(2)
 
             return_code = self.process.poll()
@@ -279,12 +272,12 @@ class YOLOv7Trainer:
                     f"Stdout:\n{stdout_output}"
                 )
 
-                print(error_msg)
+                safe_print(error_msg)
                 self.trigger_callback('error', {'message': error_msg})
                 self.is_training = False
                 return
 
-            print("✅ 프로세스가 정상적으로 시작되었습니다.")
+            safe_print("✅ 프로세스가 정상적으로 시작되었습니다.")
             self.is_training = True
 
             # 로그 모니터링 스레드 시작
@@ -296,7 +289,7 @@ class YOLOv7Trainer:
 
         except Exception as e:
             error_msg = f"훈련 시작 실패: {e}\n{traceback.format_exc()}"
-            print(error_msg)
+            safe_print(error_msg)
             self.trigger_callback('error', {'message': error_msg})
             raise
 
@@ -379,7 +372,7 @@ class YOLOv7Trainer:
             f.write(f"# Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
             yaml.dump(hyperparams, f, default_flow_style=False, sort_keys=False)
         
-        print(f"📄 커스텀 하이퍼파라미터 파일 생성: {hyp_file}")
+        safe_print(f"📄 커스텀 하이퍼파라미터 파일 생성: {hyp_file}")
         return hyp_file
     
     def get_hyp_description(self, filename):
@@ -408,7 +401,7 @@ class YOLOv7Trainer:
                             if line:
                                 line = line.strip()
                                 if line:
-                                    print(f"[STDERR] {line}")
+                                    safe_print(f"[STDERR] {line}")
                                     self.trigger_callback('log_update', {'line': f"⚠️ {line}"})
                     except:
                         break
@@ -422,7 +415,7 @@ class YOLOv7Trainer:
                 try:
                     # ✨ 먼저 프로세스 상태 확인
                     if self.process.poll() is not None:
-                        print("프로세스가 종료되었습니다.")
+                        safe_print("프로세스가 종료되었습니다.")
                         break
 
                     # stdout에서 한 줄씩 읽기
@@ -472,7 +465,7 @@ class YOLOv7Trainer:
 
                 except Exception as e:
                     if self.is_training:  # 정상 종료가 아닌 경우만 오류 보고
-                        print(f"모니터링 오류: {e}")
+                        safe_print(f"모니터링 오류: {e}")
                         self.trigger_callback('error', {'message': f"모니터링 오류: {e}"})
                     break
 
@@ -488,7 +481,7 @@ class YOLOv7Trainer:
                         if self.process.stderr:
                             stderr_remaining = self.process.stderr.read()
                             if stderr_remaining:
-                                print(f"[STDERR 최종]: {stderr_remaining}")
+                                safe_print(f"[STDERR 최종]: {stderr_remaining}")
 
                         self.trigger_callback('training_complete', {
                             'success': False,
@@ -497,7 +490,7 @@ class YOLOv7Trainer:
 
         finally:
             # 스레드 종료 시 리소스 정리
-            print("모니터링 스레드 종료")
+            safe_print("모니터링 스레드 종료")
     
     def pause_training(self):
         """훈련 일시정지"""
@@ -535,7 +528,7 @@ class YOLOv7Trainer:
             try:
                 self.process.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                print("⚠️ 프로세스 강제 종료")
+                safe_print("⚠️ 프로세스 강제 종료")
                 self.process.kill()
                 self.process.wait()
 
@@ -549,7 +542,7 @@ class YOLOv7Trainer:
             if self.monitor_thread and self.monitor_thread.is_alive():
                 self.monitor_thread.join(timeout=5)
                 if self.monitor_thread.is_alive():
-                    print("⚠️ 모니터링 스레드가 정상 종료되지 않음")
+                    safe_print("⚠️ 모니터링 스레드가 정상 종료되지 않음")
 
             self.process = None
             self.monitor_thread = None
@@ -563,7 +556,7 @@ class YOLOv7Trainer:
 
     def cleanup(self):
         """리소스 정리 - 애플리케이션 종료 시 호출"""
-        print("🧹 YOLOv7Trainer 리소스 정리 중...")
+        safe_print("🧹 YOLOv7Trainer 리소스 정리 중...")
 
         # 훈련 중이면 중지
         if self.is_training:
@@ -576,7 +569,7 @@ class YOLOv7Trainer:
             except:
                 break
 
-        print("✅ YOLOv7Trainer 정리 완료")
+        safe_print("✅ YOLOv7Trainer 정리 완료")
     
     def get_training_status(self):
         """훈련 상태 반환"""
@@ -668,7 +661,7 @@ class ConfigManager:
                     if file_config:
                         self.merge_configs(default_config, file_config)
             except Exception as e:
-                print(f"설정 파일 로드 실패: {e}")
+                safe_print(f"설정 파일 로드 실패: {e}")
         
         return default_config
     
@@ -721,7 +714,7 @@ class ConfigManager:
                 yaml.dump(config, f, default_flow_style=False, ensure_ascii=False)
             return True
         except Exception as e:
-            print(f"설정 저장 실패: {e}")
+            safe_print(f"설정 저장 실패: {e}")
             return False
 
 
@@ -776,7 +769,7 @@ class ModelManager:
                 self.saved_models.append(model_info)
                 
             except Exception as e:
-                print(f"모델 파일 정보 읽기 실패: {weight_file} - {e}")
+                safe_print(f"모델 파일 정보 읽기 실패: {weight_file} - {e}")
     
     def _determine_model_type(self, filename: str) -> str:
         """파일명으로 모델 타입 결정"""
@@ -826,11 +819,11 @@ class ModelManager:
             
             shutil.copy2(src_path, dst_path)
             
-            print(f"모델 복사 완료: {dst_path}")
+            safe_print(f"모델 복사 완료: {dst_path}")
             return True
             
         except Exception as e:
-            print(f"모델 복사 실패: {e}")
+            safe_print(f"모델 복사 실패: {e}")
             return False
     
     def delete_model(self, model_info: Dict[str, Any]) -> bool:
@@ -838,11 +831,11 @@ class ModelManager:
         try:
             model_info['filepath'].unlink()
             self.saved_models.remove(model_info)
-            print(f"모델 삭제 완료: {model_info['filename']}")
+            safe_print(f"모델 삭제 완료: {model_info['filename']}")
             return True
             
         except Exception as e:
-            print(f"모델 삭제 실패: {e}")
+            safe_print(f"모델 삭제 실패: {e}")
             return False
     
     def get_model_summary(self) -> Dict[str, Any]:
@@ -869,7 +862,7 @@ class ModelManager:
 # 사용 예시 및 테스트 코드
 if __name__ == "__main__":
     # 테스트 코드
-    print("🧪 YOLOv7 연결 모듈 테스트...")
+    safe_print("🧪 YOLOv7 연결 모듈 테스트...")
     
     try:
         # YOLOv7 트레이너 초기화
@@ -877,27 +870,27 @@ if __name__ == "__main__":
         
         # 콜백 등록
         def on_metrics_update(metrics):
-            print(f"📊 메트릭 업데이트: {metrics}")
+            safe_print(f"📊 메트릭 업데이트: {metrics}")
         
         def on_log_update(data):
-            print(f"📝 로그: {data['line']}")
+            safe_print(f"📝 로그: {data['line']}")
         
         trainer.register_callback('metrics_update', on_metrics_update)
         trainer.register_callback('log_update', on_log_update)
         
-        print("✅ YOLOv7 연결 모듈 초기화 성공!")
-        print(f"   YOLOv7 경로: {trainer.yolo_original_dir}")
-        print(f"   출력 경로: {trainer.output_dir}")
+        safe_print("✅ YOLOv7 연결 모듈 초기화 성공!")
+        safe_print(f"   YOLOv7 경로: {trainer.yolo_original_dir}")
+        safe_print(f"   출력 경로: {trainer.output_dir}")
         
         # 설정 관리자 테스트
         config_manager = ConfigManager()
-        print("✅ 설정 관리자 초기화 성공!")
+        safe_print("✅ 설정 관리자 초기화 성공!")
         
         # 모델 관리자 테스트
         model_manager = ModelManager()
         summary = model_manager.get_model_summary()
-        print(f"✅ 모델 관리자 초기화 성공! 저장된 모델: {summary['total_models']}개")
+        safe_print(f"✅ 모델 관리자 초기화 성공! 저장된 모델: {summary['total_models']}개")
         
     except Exception as e:
-        print(f"❌ 테스트 실패: {e}")
-        print("YOLOv7 레포지토리 경로를 확인하세요.")
+        safe_print(f"❌ 테스트 실패: {e}")
+        safe_print("YOLOv7 레포지토리 경로를 확인하세요.")

@@ -1,4 +1,5 @@
 """
+from utils import safe_print
 YOLOv7 로그 파서
 훈련 로그에서 메트릭을 추출하는 모듈
 """
@@ -174,7 +175,7 @@ class YOLOv7LogParser:
             }
 
         except (ValueError, IndexError) as e:
-            print(f"⚠️ 메트릭 파싱 실패: {e}")
+            safe_print(f"⚠️ 메트릭 파싱 실패: {e}")
             return None
 
     def _parse_epoch_line(self, match: re.Match) -> Dict[str, Any]:
@@ -199,7 +200,7 @@ class YOLOv7LogParser:
             }
 
         except (ValueError, IndexError) as e:
-            print(f"⚠️ Epoch 파싱 실패: {e}")
+            safe_print(f"⚠️ Epoch 파싱 실패: {e}")
             return None
 
     def _parse_progress_line(self, match: re.Match) -> Dict[str, Any]:
@@ -215,7 +216,7 @@ class YOLOv7LogParser:
             }
 
         except (ValueError, IndexError) as e:
-            print(f"⚠️ 진행률 파싱 실패: {e}")
+            safe_print(f"⚠️ 진행률 파싱 실패: {e}")
             return None
 
     def get_current_metrics(self) -> Dict[str, Any]:
@@ -230,7 +231,7 @@ class YOLOv7LogParser:
 
 # 테스트 코드
 if __name__ == "__main__":
-    print("🧪 YOLOv7LogParser 테스트...")
+    safe_print("🧪 YOLOv7LogParser 테스트...")
 
     parser = YOLOv7LogParser()
 
@@ -245,13 +246,13 @@ if __name__ == "__main__":
     for line in test_lines:
         result = parser.parse_line(line)
         if result:
-            print(f"✅ 파싱 성공: {result['type']}")
+            safe_print(f"✅ 파싱 성공: {result['type']}")
             if result['type'] == 'metrics':
                 data = result['data']
-                print(f"   Epoch: {data['epoch']}/{data['total_epochs']}")
-                print(f"   Precision: {data['precision']:.3f}, Recall: {data['recall']:.3f}")
-                print(f"   mAP@0.5: {data['map50']:.3f}, mAP@0.5:0.95: {data['map95']:.3f}")
+                safe_print(f"   Epoch: {data['epoch']}/{data['total_epochs']}")
+                safe_print(f"   Precision: {data['precision']:.3f}, Recall: {data['recall']:.3f}")
+                safe_print(f"   mAP@0.5: {data['map50']:.3f}, mAP@0.5:0.95: {data['map95']:.3f}")
         else:
-            print(f"❌ 파싱 실패: {line[:50]}")
+            safe_print(f"❌ 파싱 실패: {line[:50]}")
 
-    print("\n✅ 테스트 완료!")
+    safe_print("\n✅ 테스트 완료!")

@@ -1,4 +1,5 @@
 import sys
+from utils import safe_print
 import io
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -27,7 +28,7 @@ try:
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
-    print("⚠️ Matplotlib이 설치되지 않았습니다. 차트 기능이 제한됩니다.")
+    safe_print("⚠️ Matplotlib이 설치되지 않았습니다. 차트 기능이 제한됩니다.")
 
 class MainWindow:
     """완전한 Enhanced Professional GUI"""
@@ -3424,7 +3425,7 @@ class MainWindow:
                             self.update_charts()
 
         except Exception as e:
-            print(f"⚠️ 메트릭 업데이트 오류: {e}")
+            safe_print(f"⚠️ 메트릭 업데이트 오류: {e}")
             import traceback
             traceback.print_exc()
 
@@ -4293,17 +4294,17 @@ class MainWindow:
         """모든 subprocess 정리 (앱 종료 시 호출)"""
         import subprocess
 
-        print("🧹 Subprocess 정리 중...")
+        safe_print("🧹 Subprocess 정리 중...")
 
         # 현재 실행 중인 평가 프로세스 종료
         if self.current_eval_process and self.current_eval_process.poll() is None:
             try:
-                print("⚠️ 평가 프로세스 종료 중...")
+                safe_print("⚠️ 평가 프로세스 종료 중...")
                 self.current_eval_process.terminate()
                 try:
                     self.current_eval_process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    print("⚠️ 평가 프로세스 강제 종료")
+                    safe_print("⚠️ 평가 프로세스 강제 종료")
                     self.current_eval_process.kill()
                     self.current_eval_process.wait()
                 # stdout 명시적으로 닫기
@@ -4313,17 +4314,17 @@ class MainWindow:
                     except:
                         pass
             except Exception as e:
-                print(f"⚠️ 평가 프로세스 종료 실패: {e}")
+                safe_print(f"⚠️ 평가 프로세스 종료 실패: {e}")
 
         # 현재 실행 중인 동영상 프로세스 종료
         if self.current_video_process and self.current_video_process.poll() is None:
             try:
-                print("⚠️ 동영상 프로세스 종료 중...")
+                safe_print("⚠️ 동영상 프로세스 종료 중...")
                 self.current_video_process.terminate()
                 try:
                     self.current_video_process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    print("⚠️ 동영상 프로세스 강제 종료")
+                    safe_print("⚠️ 동영상 프로세스 강제 종료")
                     self.current_video_process.kill()
                     self.current_video_process.wait()
                 # stdout 명시적으로 닫기
@@ -4333,7 +4334,7 @@ class MainWindow:
                     except:
                         pass
             except Exception as e:
-                print(f"⚠️ 동영상 프로세스 종료 실패: {e}")
+                safe_print(f"⚠️ 동영상 프로세스 종료 실패: {e}")
 
         # 모든 평가 프로세스 정리
         for proc in self.eval_processes:
@@ -4365,11 +4366,11 @@ class MainWindow:
         self.current_eval_process = None
         self.current_video_process = None
 
-        print("✅ Subprocess 정리 완료")
+        safe_print("✅ Subprocess 정리 완료")
 
     def on_closing(self):
         """앱 종료 시 호출되는 메서드"""
-        print("🚪 애플리케이션 종료 중...")
+        safe_print("🚪 애플리케이션 종료 중...")
 
         # 훈련 중이면 확인 대화상자 표시
         if self.is_training:
@@ -4390,4 +4391,4 @@ class MainWindow:
 
         # 창 종료
         self.root.destroy()
-        print("✅ 애플리케이션 종료 완료")
+        safe_print("✅ 애플리케이션 종료 완료")

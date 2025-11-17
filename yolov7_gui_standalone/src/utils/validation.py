@@ -334,10 +334,10 @@ if __name__ == "__main__":
 
     valid, messages = validator.validate_all_settings(test_config)
 
-    print("=" * 50)
-    print("설정 검증 결과:")
-    print("=" * 50)
+    safe_print("=" * 50)
+    safe_print("설정 검증 결과:")
+    safe_print("=" * 50)
     for msg in messages:
-        print(msg)
-    print("=" * 50)
-    print(f"전체 검증 결과: {'성공' if valid else '실패'}")
+        safe_print(msg)
+    safe_print("=" * 50)
+    safe_print(f"전체 검증 결과: {'성공' if valid else '실패'}")
