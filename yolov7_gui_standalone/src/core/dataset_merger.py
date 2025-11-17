@@ -1,4 +1,5 @@
 """
+from utils import safe_print
 데이터셋 병합 모듈
 여러 데이터셋을 하나로 통합하는 기능
 """
@@ -173,7 +174,7 @@ class DatasetMerger:
         is_windows = platform.system() == 'Windows'
 
         if is_windows:
-            print("⚠️ Windows에서는 symlink가 제한적입니다. 관리자 권한이 필요할 수 있습니다.")
+            safe_print("⚠️ Windows에서는 symlink가 제한적입니다. 관리자 권한이 필요할 수 있습니다.")
 
         # 디렉토리 구조 생성
         (self.output_dir / 'images' / 'train').mkdir(parents=True, exist_ok=True)
@@ -419,7 +420,7 @@ class DatasetMerger:
         with open(yaml_path, 'w', encoding='utf-8') as f:
             yaml.dump(data_yaml, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
-        print(f"✅ data.yaml 생성 완료: {yaml_path}")
+        safe_print(f"✅ data.yaml 생성 완료: {yaml_path}")
         return yaml_path
 
     def get_merge_summary(self) -> str:
@@ -455,10 +456,10 @@ class DatasetMerger:
 
 # 테스트 코드
 if __name__ == "__main__":
-    print("🧪 DatasetMerger 테스트...")
+    safe_print("🧪 DatasetMerger 테스트...")
 
     merger = DatasetMerger(Path("test_merged_dataset"))
 
     # 테스트용으로 가상 데이터셋 정보 생성
-    print("✅ DatasetMerger 초기화 성공!")
-    print(f"출력 디렉토리: {merger.output_dir}")
+    safe_print("✅ DatasetMerger 초기화 성공!")
+    safe_print(f"출력 디렉토리: {merger.output_dir}")

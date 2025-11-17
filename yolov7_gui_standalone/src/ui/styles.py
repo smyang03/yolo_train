@@ -1,4 +1,5 @@
 """
+from utils import safe_print
 styles.py
 TODO: 구현 필요
 """

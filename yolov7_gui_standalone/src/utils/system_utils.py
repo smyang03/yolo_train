@@ -93,7 +93,7 @@ def get_available_devices():
         return (["cpu"], "cpu")
     except Exception as e:
         # 기타 오류 발생 시 안전한 기본값 반환
-        print(f"⚠️ GPU 감지 오류: {e}")
+        safe_print(f"⚠️ GPU 감지 오류: {e}")
         return (["0", "cpu"], "0")
 
 def get_optimal_workers():
@@ -217,12 +217,12 @@ def extract_classes_from_pt(pt_path):
             checkpoint = torch.load(pt_path, map_location='cpu')
         except RuntimeError as e:
             if "corrupted" in str(e).lower() or "invalid" in str(e).lower():
-                print(f"⚠️ 손상된 모델 파일: {pt_path}")
+                safe_print(f"⚠️ 손상된 모델 파일: {pt_path}")
                 return None
             raise
         except Exception as e:
             if "pickle" in str(type(e).__name__).lower():
-                print(f"⚠️ 잘못된 PyTorch 모델 형식: {pt_path}")
+                safe_print(f"⚠️ 잘못된 PyTorch 모델 형식: {pt_path}")
                 return None
             raise
 
@@ -250,13 +250,13 @@ def extract_classes_from_pt(pt_path):
         return None
 
     except FileNotFoundError:
-        print(f"⚠️ 파일을 찾을 수 없음: {pt_path}")
+        safe_print(f"⚠️ 파일을 찾을 수 없음: {pt_path}")
         return None
     except PermissionError:
-        print(f"⚠️ 파일 접근 권한 없음: {pt_path}")
+        safe_print(f"⚠️ 파일 접근 권한 없음: {pt_path}")
         return None
     except Exception as e:
-        print(f"⚠️ PT 파일에서 클래스 추출 실패: {type(e).__name__}: {e}")
+        safe_print(f"⚠️ PT 파일에서 클래스 추출 실패: {type(e).__name__}: {e}")
         return None
 
 def extract_classes_from_yaml(yaml_path):
@@ -294,7 +294,7 @@ def extract_classes_from_yaml(yaml_path):
         return None
 
     except Exception as e:
-        print(f"⚠️ YAML 파일에서 클래스 추출 실패: {e}")
+        safe_print(f"⚠️ YAML 파일에서 클래스 추출 실패: {e}")
         return None
 
 def get_classes_info(pt_path=None, yaml_path=None):

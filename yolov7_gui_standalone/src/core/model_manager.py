@@ -1,4 +1,5 @@
 """
+from utils import safe_print
 모델 관리 모듈 (Python 3.8+ 호환)
 """
 
@@ -65,7 +66,7 @@ class ModelManager:
                 self.saved_models.append(model_info)
                 
             except Exception as e:
-                print(f"모델 파일 정보 읽기 실패: {e}")
+                safe_print(f"모델 파일 정보 읽기 실패: {e}")
     
     def _determine_model_type(self, filename: str) -> str:
         """파일명으로 모델 타입 결정"""
@@ -92,12 +93,12 @@ class ModelManager:
 
 # 테스트 함수
 if __name__ == "__main__":
-    print("🧪 ModelManager 테스트...")
+    safe_print("🧪 ModelManager 테스트...")
     
     try:
         model_manager = ModelManager()
         summary = model_manager.get_model_summary()
-        print(f"✅ 모델 관리자 초기화 성공! 총 모델: {summary['total_models']}개")
+        safe_print(f"✅ 모델 관리자 초기화 성공! 총 모델: {summary['total_models']}개")
         
     except Exception as e:
-        print(f"❌ 테스트 실패: {e}")
+        safe_print(f"❌ 테스트 실패: {e}")

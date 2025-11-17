@@ -1,4 +1,5 @@
 """
+from utils import safe_print
 YOLOv7 Training GUI - Complete Professional Interface
 """
 
@@ -16,7 +17,7 @@ try:
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
-    print("⚠️ Matplotlib이 설치되지 않았습니다. 차트 기능이 제한됩니다.")
+    safe_print("⚠️ Matplotlib이 설치되지 않았습니다. 차트 기능이 제한됩니다.")
 
 class MainWindow:
     """완전한 Professional GUI 메인 윈도우"""

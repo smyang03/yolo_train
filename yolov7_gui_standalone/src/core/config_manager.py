@@ -1,4 +1,5 @@
 """
+from utils import safe_print
 설정 관리 모듈 (Python 3.8+ 호환) - 경로 문제 해결
 """
 
@@ -125,12 +126,12 @@ class ConfigManager:
         if not hyperparams_path.is_absolute():
             absolute_path = self.yolo_dir / hyperparams_input
             if absolute_path.exists():
-                print(f"✅ 하이퍼파라미터 파일 발견: {absolute_path}")
+                safe_print(f"✅ 하이퍼파라미터 파일 발견: {absolute_path}")
                 return str(absolute_path)
         
         # 파일을 찾을 수 없는 경우 자동 검색
-        print(f"⚠️ 하이퍼파라미터 파일을 찾을 수 없음: {hyperparams_input}")
-        print("🔍 자동으로 기본 파일을 검색 중...")
+        safe_print(f"⚠️ 하이퍼파라미터 파일을 찾을 수 없음: {hyperparams_input}")
+        safe_print("🔍 자동으로 기본 파일을 검색 중...")
         
         # 검색할 경로들
         search_paths = [
@@ -152,11 +153,11 @@ class ConfigManager:
                 for filename in search_files:
                     candidate = search_path / filename
                     if candidate.exists():
-                        print(f"✅ 대체 하이퍼파라미터 파일 발견: {candidate}")
+                        safe_print(f"✅ 대체 하이퍼파라미터 파일 발견: {candidate}")
                         return str(candidate)
         
         # 모든 시도 실패 시 빈 문자열 반환 (기본값 사용)
-        print(f"❌ 하이퍼파라미터 파일을 찾을 수 없습니다. YOLOv7 기본값 사용")
+        safe_print(f"❌ 하이퍼파라미터 파일을 찾을 수 없습니다. YOLOv7 기본값 사용")
         return ''
     def resolve_model_config_path(self, config_input: str) -> str:
         """🔥 모델 설정 파일 경로 해결 (새로 추가된 메서드)"""
@@ -164,19 +165,19 @@ class ConfigManager:
         # 1. 절대 경로인 경우 그대로 사용
         config_path = Path(config_input)
         if config_path.is_absolute() and config_path.exists():
-            print(f"✅ 절대 경로 모델 설정 사용: {config_path}")
+            safe_print(f"✅ 절대 경로 모델 설정 사용: {config_path}")
             return str(config_path)
         
         # 2. 상대 경로인 경우 YOLOv7 디렉토리 기준으로 변환
         if not config_path.is_absolute():
             absolute_path = self.yolo_dir / config_input
             if absolute_path.exists():
-                print(f"✅ 상대 경로 해결: {absolute_path}")
+                safe_print(f"✅ 상대 경로 해결: {absolute_path}")
                 return str(absolute_path)
         
         # 3. 파일을 찾을 수 없는 경우 자동 검색
-        print(f"⚠️ 설정 파일을 찾을 수 없음: {config_input}")
-        print("🔍 자동으로 대체 파일을 검색 중...")
+        safe_print(f"⚠️ 설정 파일을 찾을 수 없음: {config_input}")
+        safe_print("🔍 자동으로 대체 파일을 검색 중...")
         
         # 검색할 경로들
         search_paths = [
@@ -198,11 +199,11 @@ class ConfigManager:
                 for filename in search_files:
                     candidate = search_path / filename
                     if candidate.exists():
-                        print(f"✅ 대체 모델 설정 발견: {candidate}")
+                        safe_print(f"✅ 대체 모델 설정 발견: {candidate}")
                         return str(candidate)
         
         # 4. 모든 시도 실패 시 원본 경로 반환 (오류 발생 예상)
-        print(f"❌ 모델 설정 파일을 찾을 수 없습니다: {config_input}")
+        safe_print(f"❌ 모델 설정 파일을 찾을 수 없습니다: {config_input}")
         return str(self.yolo_dir / config_input)  # 최소한 절대 경로로 변환
     
     def resolve_weights_path(self, weights_input: str) -> str:
@@ -227,7 +228,7 @@ class ConfigManager:
         filename = weights_path.name
         candidate = self.yolo_dir / filename
         if candidate.exists():
-            print(f"✅ 가중치 파일 발견: {candidate}")
+            safe_print(f"✅ 가중치 파일 발견: {candidate}")
             return str(candidate)
         
         # weights 폴더에서 검색
@@ -235,10 +236,10 @@ class ConfigManager:
         if weights_folder.exists():
             candidate = weights_folder / filename
             if candidate.exists():
-                print(f"✅ weights 폴더에서 가중치 발견: {candidate}")
+                safe_print(f"✅ weights 폴더에서 가중치 발견: {candidate}")
                 return str(candidate)
         
-        print(f"⚠️ 가중치 파일을 찾을 수 없음: {weights_input}")
+        safe_print(f"⚠️ 가중치 파일을 찾을 수 없음: {weights_input}")
         return str(weights_path)  # 원본 경로 반환
     
     def validate_config(self, config: Dict[str, Any]):
@@ -285,16 +286,16 @@ class ConfigManager:
 
 # 🔥 테스트 함수 개선
 if __name__ == "__main__":
-    print("🧪 ConfigManager 향상된 테스트...")
+    safe_print("🧪 ConfigManager 향상된 테스트...")
     
     try:
         config_manager = ConfigManager()
         
         # 사용 가능한 모델 설정 파일 확인
         available_configs = config_manager.get_available_model_configs()
-        print(f"📁 사용 가능한 모델 설정: {len(available_configs)}개")
+        safe_print(f"📁 사용 가능한 모델 설정: {len(available_configs)}개")
         for config in available_configs:
-            print(f"   - {config['name']}")
+            safe_print(f"   - {config['name']}")
         
         # 샘플 UI 설정
         sample_ui_config = {
@@ -309,15 +310,15 @@ if __name__ == "__main__":
         }
         
         yolo_config = config_manager.get_training_config(sample_ui_config)
-        print(f"✅ 설정 변환 성공: {len(yolo_config)} 항목")
-        print(f"📂 해결된 모델 설정 경로: {yolo_config['model_config']}")
-        print(f"⚖️ 해결된 가중치 경로: {yolo_config['weights_path']}")
+        safe_print(f"✅ 설정 변환 성공: {len(yolo_config)} 항목")
+        safe_print(f"📂 해결된 모델 설정 경로: {yolo_config['model_config']}")
+        safe_print(f"⚖️ 해결된 가중치 경로: {yolo_config['weights_path']}")
         
         # 설정 유효성 검사
         is_valid, message = config_manager.validate_config(yolo_config)
-        print(f"🔍 설정 검증: {message}")
+        safe_print(f"🔍 설정 검증: {message}")
         
     except Exception as e:
-        print(f"❌ 테스트 실패: {e}")
+        safe_print(f"❌ 테스트 실패: {e}")
         import traceback
         traceback.print_exc()
