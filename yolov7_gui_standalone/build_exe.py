@@ -137,7 +137,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,  # GUI 애플리케이션이므로 콘솔 창 숨김
+    console=True,  # 디버깅을 위해 콘솔 창 표시
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -176,7 +176,7 @@ coll = COLLECT(
             'pyinstaller',
             '--name=YOLOv7_Training_GUI',
             '--onefile',  # 단일 파일로 빌드
-            '--windowed',  # GUI 모드 (콘솔 숨김)
+            '--console',  # 디버깅을 위해 콘솔 창 표시
             '--clean',
         ]
 
