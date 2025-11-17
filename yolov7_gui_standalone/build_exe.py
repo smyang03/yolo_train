@@ -20,11 +20,22 @@ class ExeBuilder:
         self.build_dir = self.project_root / "build"
         self.spec_file = self.project_root / "yolov7_gui.spec"
 
-        # 빌드에 포함할 데이터 파일들
-        self.datas = [
-            (str(self.project_root / "resources"), "resources"),
-            (str(self.project_root / "yolov7_embedded"), "yolov7_embedded"),
-        ]
+        # 빌드에 포함할 데이터 파일들 (경로가 존재하는 것만 추가)
+        self.datas = []
+
+        # resources 디렉토리 확인 및 추가
+        resources_path = self.project_root / "resources"
+        if resources_path.exists():
+            self.datas.append((str(resources_path), "resources"))
+        else:
+            print(f"⚠️ 경고: resources 디렉토리를 찾을 수 없습니다: {resources_path}")
+
+        # yolov7_embedded 디렉토리 확인 및 추가
+        yolov7_embedded_path = self.project_root / "yolov7_embedded"
+        if yolov7_embedded_path.exists():
+            self.datas.append((str(yolov7_embedded_path), "yolov7_embedded"))
+        else:
+            print(f"⚠️ 경고: yolov7_embedded 디렉토리를 찾을 수 없습니다: {yolov7_embedded_path}")
 
         # 숨겨진 import들 (PyInstaller가 자동 감지 못하는 모듈)
         self.hidden_imports = [
@@ -88,8 +99,8 @@ class ExeBuilder:
         """PyInstaller spec 파일 생성"""
         print("📝 Spec 파일 생성 중...")
 
-        # datas 문자열 생성
-        datas_str = ", ".join([f"('{d[0]}', '{d[1]}')" for d in self.datas])
+        # datas 문자열 생성 (경로를 슬래시로 변환하여 Windows/Linux 호환성 확보)
+        datas_str = ", ".join([f"(r'{d[0]}', '{d[1]}')" for d in self.datas])
 
         # hidden imports 문자열 생성
         hidden_imports_str = ", ".join([f"'{m}'" for m in self.hidden_imports])
@@ -100,7 +111,7 @@ block_cipher = None
 
 a = Analysis(
     ['main.py'],
-    pathex=['{str(self.project_root)}'],
+    pathex=[r'{str(self.project_root)}'],
     binaries=[],
     datas=[{datas_str}],
     hiddenimports=[{hidden_imports_str}],
@@ -157,6 +168,9 @@ coll = COLLECT(
         print("🔨 단일 EXE 파일 빌드 시작...")
         print("⚠️ 경고: 단일 파일 모드는 시작 시간이 느릴 수 있습니다.\n")
 
+        # 플랫폼별 경로 구분자 결정 (Windows: ;, Linux/Mac: :)
+        separator = ';' if os.name == 'nt' else ':'
+
         # 기본 PyInstaller 명령어
         cmd = [
             'pyinstaller',
@@ -168,7 +182,7 @@ coll = COLLECT(
 
         # 데이터 파일 추가
         for data_src, data_dst in self.datas:
-            cmd.append(f'--add-data={data_src};{data_dst}')
+            cmd.append(f'--add-data={data_src}{separator}{data_dst}')
 
         # 숨겨진 import 추가
         for module in self.hidden_imports:
