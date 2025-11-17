@@ -37,11 +37,31 @@ class YOLOv7App:
     
     def setup_paths(self):
         """경로 설정"""
-        self.app_dir = Path(__file__).parent.parent
+        # PyInstaller 환경 감지
+        if getattr(sys, 'frozen', False):
+            # PyInstaller로 빌드된 EXE 실행 중
+            # sys.executable은 EXE 파일 경로
+            self.app_dir = Path(sys.executable).parent
+            print(f"🔧 PyInstaller 모드: EXE 경로 사용")
+        else:
+            # 일반 Python 스크립트 실행 중
+            self.app_dir = Path(__file__).parent.parent
+            print(f"🔧 개발 모드: 스크립트 경로 사용")
+
         self.resources_dir = Path(get_resource_path("resources"))
         self.output_dir = self.app_dir / "outputs"
-        self.output_dir.mkdir(exist_ok=True)
+
+        try:
+            self.output_dir.mkdir(exist_ok=True, parents=True)
+        except Exception as e:
+            print(f"⚠️ outputs 디렉토리 생성 실패: {e}")
+            # 실행 파일과 같은 위치에 생성 시도
+            self.output_dir = self.app_dir / "outputs"
+            self.output_dir.mkdir(exist_ok=True, parents=True)
+
         print(f"📁 앱 디렉토리: {self.app_dir}")
+        print(f"📁 리소스 디렉토리: {self.resources_dir}")
+        print(f"📁 출력 디렉토리: {self.output_dir}")
     
     def setup_environment(self):
         """환경 설정"""
@@ -49,26 +69,46 @@ class YOLOv7App:
             from utils.system_utils import get_system_info
             self.system_info = get_system_info()
             print("✅ 시스템 정보 로드 완료")
-        except ImportError:
+        except ImportError as e:
             self.system_info = {"platform": sys.platform}
-            print("⚠️ 시스템 유틸리티 로드 실패 (기본 설정 사용)")
-    
+            print(f"⚠️ 시스템 유틸리티 로드 실패 (기본 설정 사용): {e}")
+        except Exception as e:
+            self.system_info = {"platform": sys.platform}
+            print(f"⚠️ 시스템 정보 로드 중 오류 (기본 설정 사용): {e}")
+
     def init_components(self):
         """핵심 컴포넌트 초기화"""
         try:
+            print("📦 핵심 모듈 임포트 중...")
             from core.yolo_trainer import YOLOv7Trainer
-            from core.config_manager import ConfigManager  
+            from core.config_manager import ConfigManager
             from core.model_manager import ModelManager
-            
+
+            print("🔧 YOLOv7Trainer 초기화 중...")
             self.trainer = YOLOv7Trainer()
+
+            print("🔧 ConfigManager 초기화 중...")
             self.config_manager = ConfigManager()
+
+            print("🔧 ModelManager 초기화 중...")
             self.model_manager = ModelManager()
-            
-            print(f"✅ YOLOv7 경로 확인: {self.trainer.yolo_original_dir}")
+
+            if self.trainer.yolo_original_dir:
+                print(f"✅ YOLOv7 경로 확인: {self.trainer.yolo_original_dir}")
+            else:
+                print("⚠️ YOLOv7 경로를 찾을 수 없습니다. 환경 변수를 설정하거나 수동으로 지정해야 합니다.")
+
             print("✅ 핵심 컴포넌트 로드 완료")
-            
+
+        except ImportError as e:
+            import traceback
+            print(f"❌ 모듈 임포트 실패: {e}")
+            print(f"상세 정보:\n{traceback.format_exc()}")
+            raise
         except Exception as e:
+            import traceback
             print(f"❌ 컴포넌트 로드 실패: {e}")
+            print(f"상세 정보:\n{traceback.format_exc()}")
             raise
     
     def run(self):

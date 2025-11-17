@@ -21,13 +21,18 @@ if sys.platform == 'win32':
 
 class ModelManager:
     """훈련된 모델 관리 클래스"""
-    
+
     def __init__(self):
-        self.app_dir = Path(__file__).parent.parent.parent
+        # PyInstaller 환경 감지
+        if getattr(sys, 'frozen', False):
+            self.app_dir = Path(sys.executable).parent
+        else:
+            self.app_dir = Path(__file__).parent.parent.parent
+
         self.output_dir = self.app_dir / "outputs"
         self.models_dir = self.app_dir / "saved_models"
-        
-        self.models_dir.mkdir(exist_ok=True)
+
+        self.models_dir.mkdir(exist_ok=True, parents=True)
         self.saved_models = []
         self.load_saved_models()
     

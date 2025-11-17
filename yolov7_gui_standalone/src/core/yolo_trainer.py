@@ -38,31 +38,47 @@ class YOLOv7Trainer:
         
     def setup_paths(self):
         """경로 설정 - 같은 레벨에 있는 YOLOv7 찾기"""
-        self.app_dir = Path(__file__).parent.parent.parent  # yolov7_gui_standalone/
+        # PyInstaller 환경 감지
+        if getattr(sys, 'frozen', False):
+            # PyInstaller로 빌드된 EXE 실행 중
+            self.app_dir = Path(sys.executable).parent
+        else:
+            # 일반 Python 스크립트 실행 중
+            self.app_dir = Path(__file__).parent.parent.parent  # yolov7_gui_standalone/
+
         self.project_workspace = self.app_dir.parent       # workspace/
 
         # YOLOv7 원본 경로 (같은 레벨) - 동적 경로 탐색
-        # 우선순위: 1) 같은 부모 디렉토리, 2) 환경변수, 3) 현재 디렉토리
-        yolo_candidates = [
-            self.project_workspace / "yolov7",  # workspace/yolov7/
+        # 우선순위: 1) 환경변수, 2) 같은 부모 디렉토리, 3) 현재 디렉토리
+        yolo_candidates = []
+
+        # 환경 변수 최우선
+        if os.environ.get('YOLOV7_PATH'):
+            yolo_candidates.append(Path(os.environ['YOLOV7_PATH']))
+
+        # 일반적인 위치들
+        yolo_candidates.extend([
+            self.app_dir / "yolov7",             # EXE와 같은 위치
+            self.project_workspace / "yolov7",   # workspace/yolov7/
             self.app_dir.parent / "yolov7",      # 같은 레벨
             Path.cwd() / "yolov7",               # 현재 디렉토리
             Path.cwd().parent / "yolov7",        # 상위 디렉토리
-        ]
-
-        # 환경 변수 체크
-        if os.environ.get('YOLOV7_PATH'):
-            yolo_candidates.insert(0, Path(os.environ['YOLOV7_PATH']))
+        ])
 
         self.yolo_original_dir = None
+        print(f"🔍 YOLOv7 경로 탐색 중...")
         for candidate in yolo_candidates:
+            print(f"   확인: {candidate}")
             if candidate.exists() and (candidate / "train.py").exists():
                 self.yolo_original_dir = candidate
+                print(f"   ✅ 찾음: {candidate}")
                 break
 
         # 찾지 못한 경우 기본값 설정
         if self.yolo_original_dir is None:
             self.yolo_original_dir = self.project_workspace / "yolov7"
+            print(f"   ⚠️ YOLOv7을 찾지 못했습니다. 기본 경로 사용: {self.yolo_original_dir}")
+            print(f"   💡 힌트: YOLOV7_PATH 환경 변수를 설정하거나 yolov7 폴더를 EXE와 같은 위치에 배치하세요.")
 
         self.train_script = self.yolo_original_dir / "train.py"
         

@@ -20,15 +20,23 @@ if sys.platform == 'win32':
 
 class ConfigManager:
     """설정 관리 클래스"""
-    
+
     def __init__(self):
-        self.app_dir = Path(__file__).parent.parent.parent
+        # PyInstaller 환경 감지
+        if getattr(sys, 'frozen', False):
+            self.app_dir = Path(sys.executable).parent
+        else:
+            self.app_dir = Path(__file__).parent.parent.parent
+
         self.config_dir = self.app_dir / "resources" / "configs"
         self.default_config_path = self.config_dir / "default.yaml"
-        
-        # 🔥 YOLOv7 실제 경로 설정 (수정 필요한 부분)
-        self.yolo_dir = Path("E:/yolov7_project/yolov7")
-        
+
+        # YOLOv7 경로는 환경 변수 또는 상대 경로로 설정
+        if os.environ.get('YOLOV7_PATH'):
+            self.yolo_dir = Path(os.environ['YOLOV7_PATH'])
+        else:
+            self.yolo_dir = self.app_dir.parent / "yolov7"
+
         self.config = self.load_default_config()
     
     def load_default_config(self) -> Dict[str, Any]:
