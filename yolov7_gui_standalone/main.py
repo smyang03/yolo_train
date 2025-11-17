@@ -21,9 +21,18 @@ if sys.platform == 'win32':
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
-# 경로 설정
-current_dir = Path(__file__).parent
-sys.path.insert(0, str(current_dir / "src"))
+# 경로 설정 - PyInstaller 환경 고려
+if getattr(sys, 'frozen', False):
+    # PyInstaller로 빌드된 EXE 실행 중
+    # _MEIPASS는 임시 압축 해제 디렉토리 (_internal)
+    base_path = Path(sys._MEIPASS)
+    current_dir = Path(sys.executable).parent
+    # src 모듈 경로 추가
+    sys.path.insert(0, str(base_path / "src"))
+else:
+    # 일반 Python 스크립트 실행 중
+    current_dir = Path(__file__).parent
+    sys.path.insert(0, str(current_dir / "src"))
 
 def get_resource_path(relative_path):
     """EXE에서 리소스 파일 경로 찾기"""
@@ -68,6 +77,13 @@ def main():
     print("🚀 YOLOv7 Training GUI 시작...")
     print("=" * 50)
 
+    # 디버깅: 환경 정보 출력
+    print(f"🔍 실행 모드: {'PyInstaller EXE' if getattr(sys, 'frozen', False) else '개발 모드'}")
+    print(f"🔍 Current Dir: {current_dir}")
+    if getattr(sys, 'frozen', False):
+        print(f"🔍 _MEIPASS: {sys._MEIPASS}")
+    print(f"🔍 sys.path[0]: {sys.path[0]}")
+
     try:
         # 필수 패키지 확인
         if not check_requirements():
@@ -77,7 +93,9 @@ def main():
         print("✅ 모든 필수 패키지가 설치되어 있습니다.")
 
         # GUI 애플리케이션 시작
+        print("📥 app 모듈 임포트 중...")
         from app import YOLOv7App
+        print("✅ app 모듈 임포트 완료")
 
         print("🎯 애플리케이션 초기화 중...")
         app = YOLOv7App()
