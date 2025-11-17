@@ -3,6 +3,8 @@
 여러 데이터셋을 하나로 통합하는 기능
 """
 
+import sys
+import io
 import os
 import shutil
 import yaml
@@ -10,6 +12,15 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 from collections import OrderedDict
 import platform
+
+# Windows 콘솔 UTF-8 인코딩 설정
+if sys.platform == 'win32':
+    try:
+        if sys.version_info >= (3, 7):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 
 class DatasetMerger:

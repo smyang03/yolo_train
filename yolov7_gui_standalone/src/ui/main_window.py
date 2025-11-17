@@ -1,3 +1,5 @@
+import sys
+import io
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
@@ -8,6 +10,15 @@ import os
 from datetime import datetime, timedelta
 import numpy as np
 from utils.system_utils import get_available_devices, get_optimal_workers, validate_workers, get_classes_info
+
+# Windows 콘솔 UTF-8 인코딩 설정
+if sys.platform == 'win32':
+    try:
+        if sys.version_info >= (3, 7):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 try:
     import matplotlib.pyplot as plt
